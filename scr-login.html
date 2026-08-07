@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCR-ASSET-002 · 로그인</title>
+<style>
+:root{--bg:#f3f5f9;--card:#fff;--line:#e9ecf2;--ink:#1e2430;--muted:#6b7482;--faint:#9aa3b0;--blue:#1a57d6;--blue-tint:#e4ecfc;--blue-tint2:#f2f6fe;--r-md:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#dde1e9;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px 48px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;-webkit-font-smoothing:antialiased}
+.phone{width:390px;background:var(--bg);border-radius:26px;overflow:hidden;box-shadow:0 22px 55px -20px rgba(16,24,40,.38);border:1px solid var(--line)}
+.status{height:44px;background:var(--bg);color:var(--ink);display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11.5px;font-weight:500}
+.body{padding:18px 22px 36px}
+.inp{width:100%;height:46px;border:1px solid var(--line);border-radius:var(--r-md);padding:0 13px;font-size:14px;background:var(--card);color:var(--ink)}
+.btn-blue{height:50px;border-radius:var(--r-md);background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:700;text-decoration:none;box-shadow:0 8px 18px rgba(26,87,214,.28);margin-top:18px}
+.lbl{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.scrId{position:fixed;top:10px;left:12px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;padding:3px 8px;border-radius:999px;font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="scrId">SCR-ASSET-002</div>
+<div class="phone">
+  <div class="status">
+    <span>9:41</span>
+    <div style="width:15px;height:8px;border-radius:3px;background:var(--ink);opacity:.6"></div>
+  </div>
+  <div class="body">
+    <!-- Back -->
+    <a href="scr-landing.html" style="font-size:12px;color:var(--muted);text-decoration:none">‹ 메인</a>
+
+    <!-- Title -->
+    <div style="font-size:24px;font-weight:700;color:var(--blue);letter-spacing:-.02em;margin-top:18px">로그인</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:5px">아이디와 비밀번호를 입력하세요.</div>
+
+    <!-- Fields -->
+    <div style="display:flex;flex-direction:column;gap:11px;margin-top:20px">
+      <div>
+        <div class="lbl">아이디</div>
+        <input class="inp" value="dain" readonly>
+      </div>
+      <div>
+        <div class="lbl">비밀번호</div>
+        <input class="inp" type="password" value="dain1234" readonly>
+      </div>
+    </div>
+
+    <!-- Submit -->
+    <a href="scr-dash.html" class="btn-blue">로그인</a>
+
+    <!-- Links -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-top:18px">
+      <a href="가계부 앱.html" style="font-size:12px;font-weight:600;color:var(--muted);text-decoration:none">아이디 찾기</a>
+      <div style="width:1px;height:11px;background:var(--line)"></div>
+      <a href="가계부 앱.html" style="font-size:12px;font-weight:600;color:var(--muted);text-decoration:none">비밀번호 찾기</a>
+      <div style="width:1px;height:11px;background:var(--line)"></div>
+      <a href="가계부 앱.html" style="font-size:12px;font-weight:600;color:var(--blue);text-decoration:none">회원가입</a>
+    </div>
+
+    <!-- Demo box -->
+    <div style="margin-top:28px;padding:14px;border-radius:var(--r-md);background:var(--blue-tint2);border:1px dashed #c9d3e2">
+      <div style="font-size:10.5px;font-weight:700;color:var(--blue);margin-bottom:5px">시연용 계정</div>
+      <div style="font-size:10.5px;color:var(--muted);line-height:1.7">
+        사용자 · <b>dain</b> / <b>dain1234</b><br>
+        비밀번호 찾기 질문 답: <b>상도동</b><br>
+        관리자 · <b>admin</b> / <b>admin</b>
+      </div>
+    </div>
+
+    <!-- Error state example -->
+    <div style="margin-top:22px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:9px">오류 상태</div>
+      <div style="padding:11px 13px;border-radius:var(--r-md);background:#fdeceb;font-size:11.5px;font-weight:600;color:#d33f3f;line-height:1.5">아이디 또는 비밀번호가 올바르지 않습니다.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

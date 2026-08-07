@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCR-ASSET-001 · 랜딩</title>
+<style>
+:root{--bg:#f3f5f9;--card:#fff;--line:#e9ecf2;--ink:#1e2430;--muted:#6b7482;--faint:#9aa3b0;--blue:#1a57d6;--blue-tint:#e4ecfc;--blue-tint2:#f2f6fe;--green:#12864f;--green-tint:#e6f5ed;--amber:#b5720d;--amber-tint:#fbf2e3;--r-md:12px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#dde1e9;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px 48px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;-webkit-font-smoothing:antialiased}
+.phone{width:390px;background:var(--bg);border-radius:26px;overflow:hidden;box-shadow:0 22px 55px -20px rgba(16,24,40,.38);border:1px solid var(--line);display:flex;flex-direction:column}
+.status{height:44px;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11.5px;font-weight:500;flex:none}
+.body{flex:1;padding:0 22px 32px;background:var(--bg);min-height:800px;display:flex;flex-direction:column}
+.btn-blue{height:50px;border-radius:var(--r-md);background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:700;text-decoration:none;box-shadow:0 8px 18px rgba(26,87,214,.28)}
+.btn-outline{height:50px;border-radius:var(--r-md);background:var(--card);border:1px solid var(--line);color:var(--ink);display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:600;text-decoration:none}
+.scrId{position:fixed;top:10px;left:12px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;padding:3px 8px;border-radius:999px;font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="scrId">SCR-ASSET-001</div>
+<div class="phone">
+  <div class="status">
+    <span>9:41</span>
+    <div style="display:flex;gap:5px;align-items:center">
+      <span style="width:15px;height:8px;border-radius:3px;border:1px solid #fff;opacity:.6"></span>
+      <span style="width:15px;height:8px;border-radius:3px;background:#fff;opacity:.85"></span>
+    </div>
+  </div>
+  <div class="body">
+    <!-- Hero -->
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:44px 0 0">
+      <!-- Logo -->
+      <div style="width:56px;height:56px;border-radius:18px;background:var(--blue);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 22px rgba(26,87,214,.32)">
+        <span style="color:#fff;font-size:24px;font-weight:700">₩</span>
+      </div>
+      <div style="font-size:31px;font-weight:700;color:var(--blue);letter-spacing:-.03em;line-height:1.2;margin-top:22px">가계부와<br>자산현황을<br>한 곳에서</div>
+      <div style="font-size:13px;color:var(--muted);line-height:1.7;margin-top:15px">원자료 입력부터 대분류별 합계,<br>예산 집행률, 순자산 추이까지<br>계정별로 따로 관리됩니다.</div>
+
+      <!-- Features -->
+      <div style="display:flex;flex-direction:column;gap:9px;margin-top:28px">
+        <div style="display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--blue-tint);flex:none"></div>
+          <span style="font-size:13px;font-weight:600;color:var(--ink)">월간 구분별 합계와 통계</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--green-tint);flex:none"></div>
+          <span style="font-size:13px;font-weight:600;color:var(--ink)">예산 대비 집행률 관리</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px">
+          <div style="width:28px;height:28px;border-radius:50%;background:var(--amber-tint);flex:none"></div>
+          <span style="font-size:13px;font-weight:600;color:var(--ink)">자산·부채 현황과 순자산</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- CTA -->
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:28px">
+      <a href="scr-login.html" class="btn-blue">로그인</a>
+      <a href="가계부 앱.html" class="btn-outline">회원가입</a>
+    </div>
+    <div style="text-align:center;font-size:10.5px;color:var(--faint);margin-top:20px;line-height:1.6">
+      개인 데이터는 디바이스에만 저장됩니다.
+    </div>
+  </div>
+</div>
+</body>
+</html>

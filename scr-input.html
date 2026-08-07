@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SCR-ASSET-030 · 원자료 입력</title>
+<style>
+:root{--bg:#f3f5f9;--card:#fff;--line:#e9ecf2;--track:#eceff5;--ink:#1e2430;--muted:#6b7482;--faint:#9aa3b0;--blue:#1a57d6;--blue-tint:#e4ecfc;--green:#12864f;--red:#d33f3f;--amber:#b5720d;--amber-tint:#fbf2e3;--rose:#c24a7a;--rose-tint:#fbecf2;--r-card:18px;--r-md:12px;--r-sm:8px}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#dde1e9;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:28px 16px 48px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;-webkit-font-smoothing:antialiased}
+.phone{width:390px;background:var(--bg);border-radius:26px;overflow:hidden;box-shadow:0 22px 55px -20px rgba(16,24,40,.38);border:1px solid var(--line)}
+.status{height:44px;background:var(--card);color:var(--ink);display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:11.5px;font-weight:500}
+.tab-bar{height:70px;background:var(--card);border-top:1px solid var(--line);display:flex;align-items:stretch}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10.5px;font-weight:500;color:var(--faint);text-decoration:none}
+.tab-btn.on{color:var(--blue);font-weight:700}
+.tab-plus{width:52px;height:52px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:300;box-shadow:0 4px 12px rgba(26,87,214,.4);align-self:center;margin-top:-24px;text-decoration:none}
+.card{background:var(--card);border-radius:var(--r-card);border:1px solid var(--line);box-shadow:0 1px 3px rgba(16,24,40,.06)}
+.inp-sm{height:40px;border:1px solid var(--line);border-radius:var(--r-md);padding:0 12px;font-size:13.5px;background:var(--card);color:var(--ink)}
+.chip{font-size:11.5px;padding:7px 11px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.chip.sel{background:var(--amber-tint);color:#8f5a08;border-color:#b5720d}
+.lbl{font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px}
+.scrId{position:fixed;top:10px;left:12px;font-size:10px;background:rgba(0,0,0,.55);color:#fff;padding:3px 8px;border-radius:999px;font-family:ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="scrId">SCR-ASSET-030</div>
+<div class="phone">
+  <div class="status">
+    <span>9:41</span>
+    <div style="width:15px;height:8px;border-radius:3px;background:var(--ink);opacity:.5"></div>
+  </div>
+
+  <!-- Header -->
+  <div style="background:var(--card);padding:18px 18px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between">
+    <div>
+      <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em">원자료 입력</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:3px">2026년 8월 · 작성 중 1건</div>
+    </div>
+    <div style="font-size:12px;color:#fff;background:var(--blue);padding:8px 13px;border-radius:var(--r-md)">＋ 항목 추가</div>
+  </div>
+
+  <!-- Draft card -->
+  <div style="padding:16px 18px 0">
+    <div class="card" style="padding:15px 15px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.04em">항목 1</div>
+        <div style="font-size:11px;color:var(--ink)">삭제</div>
+      </div>
+
+      <!-- Name -->
+      <div class="lbl">항목명</div>
+      <input class="inp-sm" value="커피" style="width:100%">
+
+      <!-- Date + Amount -->
+      <div style="display:flex;gap:9px;margin-top:11px">
+        <div style="flex:1"><div class="lbl">날짜</div><input type="date" class="inp-sm" value="2026-08-04" style="width:100%"></div>
+        <div style="flex:1"><div class="lbl">금액</div><input class="inp-sm" value="4,800" style="width:100%;text-align:right"></div>
+      </div>
+
+      <!-- Group chips -->
+      <div class="lbl" style="margin-top:11px">수입지출구분</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div class="chip">수입</div>
+        <div class="chip">저축/투자</div>
+        <div class="chip">고정지출</div>
+        <div class="chip sel">변동지출</div>
+        <div class="chip">이쁜이</div>
+      </div>
+
+      <!-- Category chips -->
+      <div class="lbl" style="margin-top:11px">카테고리</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div class="chip">취미</div>
+        <div class="chip sel" style="background:var(--amber-tint);color:#8f5a08;border-color:#b5720d">점심식대</div>
+        <div class="chip">쇼핑</div>
+        <div class="chip">경조사</div>
+      </div>
+
+      <!-- Note -->
+      <div class="lbl" style="margin-top:11px">비고</div>
+      <input class="inp-sm" placeholder="선택 입력" style="width:100%">
+
+      <!-- Preview -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:13px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="font-size:11px;color:var(--faint)">월별가계부 202608로 집계</div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--red)">-₩4,800</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Completed draft (saved state preview) -->
+  <div style="padding:14px 18px 0">
+    <div class="card" style="padding:13px 15px;opacity:.55">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted)">항목 2 (저장됨)</div>
+        <span style="font-size:10px;padding:3px 7px;border-radius:999px;background:#e6f5ed;color:#0d6b40;font-weight:600">저장</span>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:13px;font-weight:600">이쁜이사료</div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--rose)">-₩45,080</div>
+      </div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:4px">2026-08-02 · 이쁜이 · 이쁜이사료</div>
+    </div>
+  </div>
+
+  <!-- Save button -->
+  <div style="padding:16px 18px 24px">
+    <div style="height:50px;border-radius:var(--r-md);background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14.5px;font-weight:700;box-shadow:0 8px 18px rgba(26,87,214,.28)">1건 저장</div>
+    <div style="font-size:11px;color:var(--faint);text-align:center;margin-top:10px;line-height:1.5">저장하면 대분류·카테고리 합계와 자산현황에 즉시 반영됩니다.</div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <a href="scr-dash.html" class="tab-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      대시보드
+    </a>
+    <a href="scr-ledger.html" class="tab-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/></svg>
+      가계부
+    </a>
+    <a href="scr-input.html" class="tab-plus on" style="background:var(--blue)">＋</a>
+    <a href="scr-assets.html" class="tab-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      자산
+    </a>
+    <a href="scr-mypage.html" class="tab-btn">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      MY
+    </a>
+  </div>
+</div>
+</body>
+</html>
