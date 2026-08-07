@@ -2,414 +2,358 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ASSET 프로토타입 · 가계부 & 자산관리 앱</title>
-<style>
-:root{
-  --bg:#eef0f5;--card:#fff;--line:#e0e4ed;--ink:#1e2430;--muted:#6b7482;--faint:#9aa3b0;
-  --blue:#1a57d6;--blue-dark:#0f47b0;--blue-tint:#e4ecfc;--blue-tint2:#f2f6fe;
-  --green:#12864f;--green-tint:#e6f5ed;--red:#d33f3f;--amber:#b5720d;--amber-tint:#fbf2e3;
-  --indigo:#4b4fc4;--rose:#c24a7a;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{min-height:100vh;background:var(--bg);font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',sans-serif;-webkit-font-smoothing:antialiased;color:var(--ink)}
-
-/* PAGE HEADER */
-.page-header{background:var(--blue);color:#fff;padding:0 40px}
-.page-header-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:64px}
-.logo-row{display:flex;align-items:center;gap:12px}
-.logo-icon{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
-.logo-text{font-size:16px;font-weight:700;letter-spacing:-.01em}
-.logo-sub{font-size:11px;color:rgba(255,255,255,.55);margin-top:1px}
-.header-actions{display:flex;align-items:center;gap:10px}
-.btn-proto{height:36px;padding:0 16px;border-radius:8px;background:#fff;color:var(--blue);font-size:12.5px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:6px;box-shadow:0 2px 6px rgba(0,0,0,.12)}
-.btn-ghost{height:36px;padding:0 14px;border-radius:8px;border:1px solid rgba(255,255,255,.28);color:#fff;font-size:12.5px;font-weight:600;text-decoration:none;display:flex;align-items:center;gap:5px}
-
-/* HERO BANNER */
-.hero{max-width:1280px;margin:0 auto;padding:48px 40px 0}
-.hero-inner{background:linear-gradient(135deg,var(--blue) 0%,var(--blue-dark) 100%);border-radius:20px;padding:36px 40px;display:flex;align-items:center;justify-content:space-between;gap:32px;overflow:hidden;position:relative}
-.hero-inner::after{content:'₩';position:absolute;right:160px;top:-30px;font-size:220px;font-weight:700;color:rgba(255,255,255,.06);line-height:1;user-select:none}
-.hero-title{font-size:28px;font-weight:700;color:#fff;letter-spacing:-.03em;line-height:1.25}
-.hero-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:10px;line-height:1.7}
-.hero-badges{display:flex;flex-wrap:wrap;gap:7px;margin-top:18px}
-.hero-badge{font-size:11px;font-weight:600;padding:5px 10px;border-radius:999px;background:rgba(255,255,255,.15);color:#fff}
-.hero-stats{display:flex;gap:28px;flex:none}
-.stat-item{text-align:center}
-.stat-val{font-size:26px;font-weight:700;color:#fff;letter-spacing:-.02em}
-.stat-lbl{font-size:10.5px;color:rgba(255,255,255,.5);margin-top:3px}
-
-/* MAIN */
-.main{max-width:1280px;margin:0 auto;padding:40px 40px 60px}
-
-/* SECTION HEADER */
-.sec-hd{display:flex;align-items:baseline;gap:10px;margin-bottom:20px}
-.sec-title{font-size:18px;font-weight:700}
-.sec-cnt{font-size:12px;font-weight:600;color:var(--muted)}
-
-/* SCREEN GRID */
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;margin-bottom:48px}
-.screen-card{background:var(--card);border-radius:16px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(16,24,40,.06);overflow:hidden;transition:transform .15s,box-shadow .15s;cursor:pointer;text-decoration:none;color:inherit;display:block}
-.screen-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(16,24,40,.12)}
-.screen-card-thumb{height:200px;overflow:hidden;position:relative;background:var(--bg)}
-.screen-card-thumb iframe{width:390px;height:844px;border:none;pointer-events:none;transform-origin:top left}
-.screen-card-body{padding:14px 16px 16px;border-top:1px solid var(--line)}
-.screen-card-id{font-size:10.5px;font-weight:700;color:var(--blue);letter-spacing:.04em;font-family:ui-monospace,Menlo,monospace;margin-bottom:5px}
-.screen-card-name{font-size:14px;font-weight:700;color:var(--ink)}
-.screen-card-desc{font-size:11.5px;color:var(--muted);margin-top:4px;line-height:1.5}
-
-/* FLOW DIAGRAM */
-.flow{display:flex;flex-wrap:wrap;gap:0;background:var(--card);border-radius:16px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(16,24,40,.06);overflow:hidden;margin-bottom:48px}
-.flow-node{flex:1;min-width:140px;padding:18px 16px;border-right:1px solid var(--line);position:relative}
-.flow-node:last-child{border-right:none}
-.flow-node-icon{width:36px;height:36px;border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;font-size:16px}
-.flow-node-title{font-size:13px;font-weight:700;color:var(--ink)}
-.flow-node-desc{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.55}
-.flow-arrow{position:absolute;right:-1px;top:50%;transform:translateY(-50%);width:24px;height:24px;background:var(--card);border:1px solid var(--line);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);z-index:1}
-
-/* SSOT TABLE */
-.ssot-table{width:100%;border-collapse:collapse;background:var(--card);border-radius:16px;border:1px solid var(--line);box-shadow:0 1px 3px rgba(16,24,40,.06);overflow:hidden;margin-bottom:48px}
-.ssot-table th{background:#f8f9fc;padding:11px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;border-bottom:1px solid var(--line)}
-.ssot-table td{padding:12px 14px;font-size:12.5px;border-bottom:1px solid var(--line);vertical-align:top}
-.ssot-table tr:last-child td{border-bottom:none}
-.tag{display:inline-block;font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:999px;font-family:ui-monospace,Menlo,monospace}
-
-/* FOOTER */
-.footer{background:var(--ink);color:rgba(255,255,255,.45);text-align:center;font-size:11px;padding:20px 0}
-</style>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="가계부 & 자산관리 앱 — 수입·지출·자산을 한 곳에서">
+<meta name="theme-color" content="#1a57d6">
+<title>가계부 & 자산관리 앱</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 </head>
 <body>
+<div class="frame-wrap">
+<div class="phone" id="app">
 
-<!-- Page header -->
-<div class="page-header">
-  <div class="page-header-inner">
-    <div class="logo-row">
-      <div class="logo-icon">₩</div>
-      <div>
-        <div class="logo-text">가계부 & 자산관리 앱</div>
-        <div class="logo-sub">ASSET 프로젝트 · 목업 & 프로토타입</div>
-      </div>
-    </div>
-    <div class="header-actions">
-      <a href="가계부 앱.html" class="btn-ghost" target="_blank">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
-        인터랙티브 앱
-      </a>
-      <a href="scr-landing.html" class="btn-proto" target="_blank">
-        ▶ 프로토타입 시작
-      </a>
-    </div>
-  </div>
-</div>
-
-<!-- Hero banner -->
-<div class="hero">
-  <div class="hero-inner">
-    <div>
-      <div class="hero-title">가계부와 자산현황을<br>한 곳에서 관리하는 앱</div>
-      <div class="hero-sub">원자료 입력 → 월간 대분류 합계 → 예산 집행률 → 순자산 추이<br>계정 분리, 비밀번호 찾기, 관리자 패널까지 완성된 모바일 앱 프로토타입</div>
-      <div class="hero-badges">
-        <span class="hero-badge">수입 / 저축·투자</span>
-        <span class="hero-badge">고정·변동지출</span>
-        <span class="hero-badge">이쁜이</span>
-        <span class="hero-badge">현금·적금·연금·주식</span>
-        <span class="hero-badge">예산 집행률</span>
-        <span class="hero-badge">순자산 목표</span>
-      </div>
-    </div>
-    <div class="hero-stats">
-      <div class="stat-item"><div class="stat-val">7</div><div class="stat-lbl">목업 화면</div></div>
-      <div class="stat-item"><div class="stat-val">5</div><div class="stat-lbl">대분류 그룹</div></div>
-      <div class="stat-item"><div class="stat-val">7</div><div class="stat-lbl">자산 유형</div></div>
-    </div>
-  </div>
-</div>
-
-<div class="main">
-
-  <!-- ── USER SCREENS ── -->
-  <div class="sec-hd">
-    <div class="sec-title">화면 목업</div>
-    <div class="sec-cnt">7개 화면</div>
-  </div>
-  <div class="grid">
-
-    <a href="scr-landing.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-landing.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-001</div>
-        <div class="screen-card-name">랜딩</div>
-        <div class="screen-card-desc">앱 진입 화면. 핵심 기능 3가지 소개 후 로그인·회원가입 유도.</div>
-      </div>
-    </a>
-
-    <a href="scr-login.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-login.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-002</div>
-        <div class="screen-card-name">로그인</div>
-        <div class="screen-card-desc">아이디/비밀번호 입력. 오류 상태, 아이디 찾기·회원가입 링크.</div>
-      </div>
-    </a>
-
-    <a href="scr-dash.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-dash.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-010</div>
-        <div class="screen-card-name">대시보드</div>
-        <div class="screen-card-desc">순자산, 자산 타입별 비율 바, 수입/지출 KPI, 최근 원자료.</div>
-      </div>
-    </a>
-
-    <a href="scr-ledger.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-ledger.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-020</div>
-        <div class="screen-card-name">월간 가계부</div>
-        <div class="screen-card-desc">도넛 차트, 대분류 접기/펼치기, 예산 집행률 바, 원자료 목록.</div>
-      </div>
-    </a>
-
-    <a href="scr-input.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-input.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-030</div>
-        <div class="screen-card-name">원자료 입력</div>
-        <div class="screen-card-desc">항목명·날짜·금액·대분류·카테고리 칩 선택. 복수 항목 동시 작성.</div>
-      </div>
-    </a>
-
-    <a href="scr-assets.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-assets.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-040</div>
-        <div class="screen-card-name">자산현황</div>
-        <div class="screen-card-desc">현금·적금·연금·주식 등 유형별 계좌, 잔액 인라인 수정, 자산 추가.</div>
-      </div>
-    </a>
-
-    <a href="scr-mypage.html" class="screen-card" target="_blank">
-      <div class="screen-card-thumb">
-        <iframe src="scr-mypage.html" style="transform:scale(0.615)" loading="lazy"></iframe>
-      </div>
-      <div class="screen-card-body">
-        <div class="screen-card-id">SCR-ASSET-050</div>
-        <div class="screen-card-name">마이페이지</div>
-        <div class="screen-card-desc">프로필 편집, 월별 대분류 합계, 순자산 목표 진행률.</div>
-      </div>
-    </a>
-
-  </div>
-
-  <!-- ── FLOW ── -->
-  <div class="sec-hd">
-    <div class="sec-title">화면 흐름</div>
-  </div>
-  <div class="flow" style="margin-bottom:48px">
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#e4ecfc">🏁</div>
-      <div class="flow-node-title">랜딩</div>
-      <div class="flow-node-desc">SCR-ASSET-001<br>앱 소개 & 진입</div>
-      <div class="flow-arrow">›</div>
-    </div>
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#e6f5ed">🔑</div>
-      <div class="flow-node-title">인증</div>
-      <div class="flow-node-desc">SCR-ASSET-002~003<br>로그인 · 회원가입<br>비밀번호 찾기</div>
-      <div class="flow-arrow">›</div>
-    </div>
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#e4ecfc">📊</div>
-      <div class="flow-node-title">대시보드</div>
-      <div class="flow-node-desc">SCR-ASSET-010<br>순자산 · 수지 KPI<br>최근 원자료</div>
-      <div class="flow-arrow">›</div>
-    </div>
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#fbf2e3">📒</div>
-      <div class="flow-node-title">월간 가계부</div>
-      <div class="flow-node-desc">SCR-ASSET-020<br>도넛 · 대분류<br>예산 집행률</div>
-      <div class="flow-arrow">›</div>
-    </div>
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#fbecf2">✏️</div>
-      <div class="flow-node-title">원자료 입력</div>
-      <div class="flow-node-desc">SCR-ASSET-030<br>＋버튼 탭</div>
-      <div class="flow-arrow">›</div>
-    </div>
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#ecedfb">🏦</div>
-      <div class="flow-node-title">자산현황</div>
-      <div class="flow-node-desc">SCR-ASSET-040<br>계좌별 잔액 관리</div>
-      <div class="flow-arrow">›</div>
-    </div>
-    <div class="flow-node">
-      <div class="flow-node-icon" style="background:#e6f5ed">👤</div>
-      <div class="flow-node-title">마이페이지</div>
-      <div class="flow-node-desc">SCR-ASSET-050<br>프로필 · 목표</div>
+  <!-- Status bar -->
+  <div class="status-bar" id="status-bar" style="background:var(--blue);color:#fff">
+    <span>9:41</span>
+    <div style="display:flex;gap:5px;align-items:center">
+      <span style="width:15px;height:8px;border-radius:3px;border:1px solid currentColor;opacity:.6"></span>
+      <span style="width:15px;height:8px;border-radius:3px;background:currentColor;opacity:.85"></span>
     </div>
   </div>
 
-  <!-- ── DESIGN SYSTEM ── -->
-  <div class="sec-hd">
-    <div class="sec-title">디자인 토큰</div>
-  </div>
-  <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:48px">
-    <!-- Color groups -->
-    <div style="background:var(--card);border-radius:14px;border:1px solid var(--line);padding:18px 20px;flex:1;min-width:280px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:12px">대분류 색상</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#12864f"></div><span style="font-size:12.5px;flex:1">수입</span><code style="font-size:10px;color:var(--muted)">#12864f</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#1a57d6"></div><span style="font-size:12.5px;flex:1">저축/투자</span><code style="font-size:10px;color:var(--muted)">#1a57d6</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#4b4fc4"></div><span style="font-size:12.5px;flex:1">고정지출</span><code style="font-size:10px;color:var(--muted)">#4b4fc4</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#b5720d"></div><span style="font-size:12.5px;flex:1">변동지출</span><code style="font-size:10px;color:var(--muted)">#b5720d</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#c24a7a"></div><span style="font-size:12.5px;flex:1">이쁜이</span><code style="font-size:10px;color:var(--muted)">#c24a7a</code></div>
+  <!-- Scrollable area -->
+  <div class="scroll-area" id="scroll-area">
+
+    <!-- ── LANDING ── -->
+    <div id="s-landing" class="screen-flex" style="padding:0 22px 28px">
+      <div class="landing-hero">
+        <div class="landing-logo"><span style="color:#fff;font-size:22px;font-weight:700">₩</span></div>
+        <div class="landing-title">가계부와<br>자산현황을<br>한 곳에서</div>
+        <div class="landing-sub">원자료 입력부터 대분류별 합계, 예산 집행률,<br>순자산 추이까지 계정별로 따로 관리됩니다.</div>
+        <div class="landing-features">
+          <div class="feat-item"><div class="feat-dot" style="background:var(--blue-tint)"></div><span class="feat-txt">월간 구분별 합계와 통계</span></div>
+          <div class="feat-item"><div class="feat-dot" style="background:var(--green-tint)"></div><span class="feat-txt">예산 대비 집행률 관리</span></div>
+          <div class="feat-item"><div class="feat-dot" style="background:var(--amber-tint)"></div><span class="feat-txt">자산·부채 현황과 순자산</span></div>
+        </div>
+      </div>
+      <div class="landing-btns">
+        <button class="btn-blue" onclick="go('login')">로그인</button>
+        <button class="btn-outline" onclick="go('signup')">회원가입</button>
       </div>
     </div>
-    <div style="background:var(--card);border-radius:14px;border:1px solid var(--line);padding:18px 20px;flex:1;min-width:280px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:12px">자산 유형 색상</div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#1a57d6"></div><span style="font-size:12.5px;flex:1">현금</span><code style="font-size:10px;color:var(--muted)">blue</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#4b4fc4"></div><span style="font-size:12.5px;flex:1">적금</span><code style="font-size:10px;color:var(--muted)">indigo</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#0f7d78"></div><span style="font-size:12.5px;flex:1">예금</span><code style="font-size:10px;color:var(--muted)">teal</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#c24a7a"></div><span style="font-size:12.5px;flex:1">연금</span><code style="font-size:10px;color:var(--muted)">rose</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#d33f3f"></div><span style="font-size:12.5px;flex:1">주식</span><code style="font-size:10px;color:var(--muted)">red</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#12864f"></div><span style="font-size:12.5px;flex:1">청약</span><code style="font-size:10px;color:var(--muted)">green</code></div>
-        <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#9aa3b0"></div><span style="font-size:12.5px;flex:1">대출</span><code style="font-size:10px;color:var(--muted)">faint</code></div>
+
+    <!-- ── LOGIN ── -->
+    <div id="s-login" class="screen">
+      <div class="auth-wrap">
+        <div class="auth-back" onclick="go('landing')">‹ 메인</div>
+        <div class="auth-title">로그인</div>
+        <div class="auth-sub">아이디와 비밀번호를 입력하세요.</div>
+        <div id="login-notice"></div>
+        <div class="auth-fields">
+          <div>
+            <div class="lbl">아이디</div>
+            <input id="l-id" class="inp" placeholder="영문·숫자 4자 이상">
+          </div>
+          <div>
+            <div class="lbl">비밀번호</div>
+            <input id="l-pw" type="password" class="inp" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()">
+          </div>
+        </div>
+        <button class="btn-blue" style="margin-top:18px" onclick="doLogin()">로그인</button>
+        <div class="auth-links">
+          <span class="auth-link" onclick="go('find','id')">아이디 찾기</span>
+          <div class="auth-divider"></div>
+          <span class="auth-link" onclick="go('find','pw')">비밀번호 찾기</span>
+          <div class="auth-divider"></div>
+          <span class="auth-link blue" onclick="go('signup')">회원가입</span>
+        </div>
+        <div class="demo-box">
+          <div class="demo-title">시연용 계정</div>
+          <div class="demo-txt">사용자 dain / dain1234 · 질문 답 "상도동"<br>관리자 admin / admin</div>
+        </div>
       </div>
     </div>
-    <div style="background:var(--card);border-radius:14px;border:1px solid var(--line);padding:18px 20px;flex:1;min-width:240px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:12px">시연 데이터</div>
-      <div style="display:flex;flex-direction:column;gap:7px">
-        <div style="font-size:11.5px"><span style="color:var(--muted)">계정</span> <b>dain</b> / dain1234</div>
-        <div style="font-size:11.5px"><span style="color:var(--muted)">순자산</span> <b>₩77,719,818</b></div>
-        <div style="font-size:11.5px"><span style="color:var(--muted)">수입(7월)</span> <b style="color:#12864f">₩3,978,847</b></div>
-        <div style="font-size:11.5px"><span style="color:var(--muted)">지출(7월)</span> <b style="color:#d33f3f">₩3,496,640</b></div>
-        <div style="font-size:11.5px"><span style="color:var(--muted)">잉여</span> <b>+₩482,207</b></div>
-        <div style="font-size:11.5px"><span style="color:var(--muted)">목표</span> 1억 순자산 (77.7%)</div>
-        <div style="margin-top:8px;height:5px;border-radius:999px;background:#eceff5;overflow:hidden"><div style="height:5px;background:#1a57d6;width:77.7%;border-radius:999px"></div></div>
+
+    <!-- ── SIGNUP ── -->
+    <div id="s-signup" class="screen">
+      <div class="auth-wrap">
+        <div class="auth-back" onclick="go('landing')">‹ 메인</div>
+        <div class="auth-title">회원가입</div>
+        <div class="auth-sub">비밀번호는 저장 시 암호화됩니다.</div>
+        <div id="signup-notice"></div>
+        <div class="auth-fields">
+          <div><div class="lbl">이름</div><input id="su-name" class="inp" placeholder="홍길동"></div>
+          <div><div class="lbl">아이디</div><input id="su-id" class="inp" placeholder="영문·숫자 4자 이상"></div>
+          <div style="display:flex;gap:9px">
+            <div style="flex:1"><div class="lbl">비밀번호</div><input id="su-pw" type="password" class="inp" placeholder="6자 이상"></div>
+            <div style="flex:1"><div class="lbl">비밀번호 확인</div><input id="su-pw2" type="password" class="inp" placeholder="한 번 더"></div>
+          </div>
+          <div><div class="lbl">휴대폰 번호</div><input id="su-phone" class="inp" placeholder="01012345678" inputmode="numeric"></div>
+        </div>
+        <div style="margin-top:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px">
+            <div style="font-size:12px;font-weight:700;color:var(--ink)">비밀번호 찾기 질문</div>
+            <div onclick="shuffleQs()" style="font-size:11px;font-weight:600;color:var(--blue);cursor:pointer">질문 다시 뽑기</div>
+          </div>
+          <div id="su-qs" style="display:flex;flex-direction:column;gap:9px"></div>
+        </div>
+        <button class="btn-blue" style="margin-top:18px" onclick="doSignup()">가입하기</button>
+        <div style="text-align:center;font-size:12px;font-weight:600;color:var(--muted);margin-top:14px;cursor:pointer" onclick="go('login')">이미 계정이 있어요 · 로그인</div>
       </div>
     </div>
-  </div>
 
-  <!-- ── ID TABLE ── -->
-  <div class="sec-hd">
-    <div class="sec-title">화면 ID 체계</div>
-  </div>
-  <table class="ssot-table">
-    <thead>
-      <tr>
-        <th>화면 ID</th>
-        <th>화면명</th>
-        <th>파일</th>
-        <th>설명</th>
-        <th>관련 기능</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-001</span></td>
-        <td>랜딩</td>
-        <td><a href="scr-landing.html" style="color:var(--blue);font-size:11.5px">scr-landing.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">앱 소개, 로그인/회원가입 진입점</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-001-01</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-002</span></td>
-        <td>로그인</td>
-        <td><a href="scr-login.html" style="color:var(--blue);font-size:11.5px">scr-login.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">ID/PW 인증, 오류 상태, 관리자 분기</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-001-02</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-003</span></td>
-        <td>회원가입</td>
-        <td><a href="가계부 앱.html" style="color:var(--blue);font-size:11.5px">가계부 앱.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">이름/ID/PW/전화번호, 보안 질문 3개</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-001-03</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-010</span></td>
-        <td>대시보드</td>
-        <td><a href="scr-dash.html" style="color:var(--blue);font-size:11.5px">scr-dash.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">순자산, KPI, 자산 분포, 구분별 합계</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-010-01~04</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-020</span></td>
-        <td>월간 가계부</td>
-        <td><a href="scr-ledger.html" style="color:var(--blue);font-size:11.5px">scr-ledger.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">도넛, 대분류별 집계, 예산 집행률, 원자료</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-020-01~05</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-030</span></td>
-        <td>원자료 입력</td>
-        <td><a href="scr-input.html" style="color:var(--blue);font-size:11.5px">scr-input.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">항목 드래프트, 대분류·카테고리 선택, 저장</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-030-01~03</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-040</span></td>
-        <td>자산현황</td>
-        <td><a href="scr-assets.html" style="color:var(--blue);font-size:11.5px">scr-assets.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">유형별 계좌 목록, 잔액 수정, 자산 추가</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-040-01~04</td>
-      </tr>
-      <tr>
-        <td><span class="tag" style="background:#e4ecfc;color:#134aad">SCR-ASSET-050</span></td>
-        <td>마이페이지</td>
-        <td><a href="scr-mypage.html" style="color:var(--blue);font-size:11.5px">scr-mypage.html</a></td>
-        <td style="font-size:12px;color:var(--muted)">프로필, 월간 요약, 순자산 목표 추적</td>
-        <td style="font-size:11.5px;color:var(--muted)">FN-ASSET-050-01~03</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- Quick links -->
-  <div style="background:var(--card);border-radius:14px;border:1px solid var(--line);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
-    <div>
-      <div style="font-size:14px;font-weight:700">인터랙티브 프로토타입</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:3px">로그인부터 데이터 입력까지 실제로 작동하는 완성 프로토타입</div>
+    <!-- ── FIND ACCOUNT ── -->
+    <div id="s-find" class="screen">
+      <div class="auth-wrap">
+        <div class="auth-back" onclick="go('login')">‹ 로그인</div>
+        <div class="auth-title">계정 찾기</div>
+        <div style="display:flex;background:var(--track);border-radius:999px;padding:3px;margin-top:16px">
+          <div id="find-seg-id" class="seg-item" onclick="setFindMode('id')" style="background:var(--card);color:var(--ink)">아이디 찾기</div>
+          <div id="find-seg-pw" class="seg-item" onclick="setFindMode('pw')">비밀번호 찾기</div>
+        </div>
+        <div id="find-notice"></div>
+        <div id="find-id-fields" style="margin-top:16px">
+          <div class="lbl">가입한 휴대폰 번호</div>
+          <input id="f-phone-id" class="inp" placeholder="01012345678" inputmode="numeric">
+          <div style="font-size:11px;color:var(--faint);margin-top:8px;line-height:1.5">번호로 가입된 아이디를 확인합니다.</div>
+        </div>
+        <div id="find-pw-fields" style="margin-top:16px;display:none;flex-direction:column;gap:11px">
+          <div><div class="lbl">아이디</div><input id="f-id" class="inp" placeholder="가입한 아이디"></div>
+          <div><div class="lbl">휴대폰 번호</div><input id="f-phone-pw" class="inp" placeholder="01012345678" inputmode="numeric"></div>
+          <div id="find-q-box" style="background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 13px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span id="find-q-text" style="font-size:12px;font-weight:600;color:var(--ink);flex:1"></span>
+              <span onclick="rotateQ()" style="font-size:10.5px;font-weight:600;color:var(--blue);cursor:pointer;flex:none">다른 질문</span>
+            </div>
+            <input id="f-ans" class="inp-sm" placeholder="답변 입력" style="width:100%;margin-top:9px">
+          </div>
+          <div><div class="lbl">새 비밀번호</div><input id="f-npw" type="password" class="inp" placeholder="6자 이상"></div>
+        </div>
+        <button class="btn-blue" style="margin-top:18px" onclick="doFind()">확인</button>
+      </div>
     </div>
-    <a href="가계부 앱.html" style="height:42px;padding:0 20px;border-radius:10px;background:var(--blue);color:#fff;font-size:13px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:7px;box-shadow:0 6px 14px rgba(26,87,214,.28);flex:none">
-      ▶ 앱 실행하기
-    </a>
+
+    <!-- ── ADMIN ── -->
+    <div id="s-admin" class="screen">
+      <div style="background:var(--blue);color:#fff;padding:20px 18px 22px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.04em">관리자</div>
+            <div style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:3px">계정 관리</div>
+          </div>
+          <div onclick="go('landing')" style="font-size:11.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.16);padding:8px 12px;border-radius:999px;cursor:pointer">나가기</div>
+        </div>
+        <div id="admin-sub" style="font-size:11.5px;color:rgba(255,255,255,.65);margin-top:12px"></div>
+      </div>
+      <div id="admin-notice"></div>
+      <div id="admin-list" style="padding:16px 18px 28px;display:flex;flex-direction:column;gap:11px"></div>
+    </div>
+
+    <!-- ── APP ── -->
+    <div id="s-app" class="screen">
+
+      <!-- DASHBOARD -->
+      <div id="tab-dash">
+        <div class="dash-header">
+          <div class="dash-header-row">
+            <div>
+              <div class="dash-net-label">순자산</div>
+              <div id="d-net-worth" class="dash-net-val">—</div>
+            </div>
+            <div style="text-align:right;padding-top:4px">
+              <div id="d-month-label" class="dash-month-label"></div>
+              <div id="d-net-flow" class="dash-flow"></div>
+            </div>
+          </div>
+          <div id="d-asset-bar" class="asset-bar"></div>
+          <div id="d-asset-legend" class="asset-legend"></div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi-card">
+            <div class="kpi-label">이번 달 수입</div>
+            <div id="d-income" class="kpi-val" style="color:var(--green)">—</div>
+            <div id="d-prev-income" class="kpi-prev"></div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">이번 달 지출</div>
+            <div id="d-spend" class="kpi-val" style="color:var(--red)">—</div>
+            <div id="d-prev-spend" class="kpi-prev"></div>
+          </div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="section-hd"><div class="section-title">계좌·자산</div><div class="section-more" onclick="switchTab('assets')">전체 보기 ›</div></div>
+          <div class="card" id="d-asset-list"></div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="section-title" style="margin-bottom:9px" id="d-group-title"></div>
+          <div class="card" id="d-group-list" style="padding:6px 15px"></div>
+        </div>
+        <div style="padding:18px 18px 24px">
+          <div class="section-hd"><div class="section-title">최근 입력</div></div>
+          <div class="card" id="d-recent-tx"></div>
+        </div>
+      </div>
+
+      <!-- LEDGER -->
+      <div id="tab-ledger" style="display:none">
+        <div class="ledger-header">
+          <div class="ledger-controls">
+            <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em">월간 가계부</div>
+            <div style="display:flex;gap:6px">
+              <select id="ledger-year" class="sel-sm" onchange="state.year=this.value;render()"></select>
+              <select id="ledger-mon" class="sel-sm" onchange="state.mon=this.value;render()"></select>
+            </div>
+          </div>
+          <div id="ledger-sub-label" style="font-size:10.5px;color:var(--faint);margin-top:8px"></div>
+          <div class="ledger-summary">
+            <div class="ledger-sum-item"><div class="ls-lbl">수입</div><div id="l-income" class="ls-val" style="color:var(--green)">—</div></div>
+            <div class="ledger-sum-item"><div class="ls-lbl">지출</div><div id="l-spend" class="ls-val" style="color:var(--red)">—</div></div>
+            <div class="ledger-sum-item"><div class="ls-lbl">잔액</div><div id="l-net" class="ls-val" style="color:var(--ink)">—</div></div>
+          </div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="card" style="padding:18px 16px">
+            <div style="display:flex;align-items:center;gap:18px">
+              <div id="l-donut" class="donut-wrap">
+                <div class="donut-center"><div class="donut-lbl">지출 합계</div><div id="l-donut-val" class="donut-val">—</div></div>
+              </div>
+              <div id="l-donut-legend" style="flex:1;display:flex;flex-direction:column;gap:8px"></div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="section-title" style="margin-bottom:9px">대분류별 합계 · 전월 대비</div>
+          <div id="l-groups"></div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="section-title" style="margin-bottom:9px">예산 대비 집행률</div>
+          <div class="card" style="padding:6px 15px" id="l-budget"></div>
+        </div>
+        <div style="padding:18px 18px 24px">
+          <div class="section-hd"><div id="l-tx-title" class="section-title">원자료</div><div class="section-more" onclick="switchTab('input')">입력하기 ›</div></div>
+          <div class="card" id="l-tx-list"></div>
+        </div>
+      </div>
+
+      <!-- INPUT -->
+      <div id="tab-input" style="display:none">
+        <div class="input-header">
+          <div>
+            <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em">원자료 입력</div>
+            <div id="inp-sub-label" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
+          </div>
+          <button onclick="addDraft()" style="font-size:12px;font-weight:500;color:#fff;background:var(--blue);padding:8px 13px;border-radius:var(--r-md);cursor:pointer;border:none">＋ 항목 추가</button>
+        </div>
+        <div style="padding:16px 18px 0" id="draft-list"></div>
+        <div style="padding:16px 18px 24px">
+          <button id="save-btn" onclick="saveDrafts()" class="btn-blue"></button>
+          <div style="font-size:11px;color:var(--faint);text-align:center;margin-top:10px;line-height:1.5">저장하면 대분류·카테고리 합계와 자산현황에 즉시 반영됩니다.</div>
+        </div>
+      </div>
+
+      <!-- ASSETS -->
+      <div id="tab-assets" style="display:none">
+        <div class="assets-header">
+          <div style="font-size:19px;font-weight:600;letter-spacing:-.01em">자산현황</div>
+          <div class="assets-total-lbl">유동자산 합계</div>
+          <div id="a-total" class="assets-total-val">—</div>
+          <div id="a-sub" class="assets-sub"></div>
+        </div>
+        <div style="padding:16px 18px 0" id="asset-group-list"></div>
+        <div style="padding:16px 18px 24px">
+          <div class="add-asset-box">
+            <div style="font-size:12px;font-weight:600;color:var(--ink);margin-bottom:10px">자산 추가</div>
+            <input id="new-asset-name" class="inp-sm" placeholder="계좌·자산 이름" style="width:100%">
+            <div id="asset-type-chips" class="chip-group" style="margin:10px 0"></div>
+            <div style="display:flex;gap:9px">
+              <input id="new-asset-amount" class="inp-sm" placeholder="기존잔액" inputmode="numeric" style="flex:1;text-align:right">
+              <button onclick="addAsset()" style="width:82px;height:42px;border-radius:var(--r-md);background:var(--blue);color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer">추가</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MYPAGE -->
+      <div id="tab-mypage" style="display:none">
+        <div class="my-header">
+          <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em;margin-bottom:16px">마이페이지</div>
+          <div class="my-profile-row">
+            <div class="my-avatar"><span>프로필<br>사진</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:7px">
+              <div class="my-info-row">
+                <span id="my-id-badge" class="my-id-badge"></span>
+                <span id="my-phone" class="my-phone"></span>
+              </div>
+              <div class="my-field-row">
+                <span class="my-field-lbl">이름</span>
+                <input id="my-name" class="inp-sm" style="flex:1" onchange="state.profile.name=this.value">
+              </div>
+              <div class="my-field-row">
+                <span class="my-field-lbl">나이</span>
+                <input id="my-age" class="inp-sm" inputmode="numeric" style="width:64px" onchange="state.profile.age=this.value">
+                <span style="font-size:11.5px;color:var(--faint)">세</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="section-hd">
+            <div id="my-month-title" class="section-title"></div>
+            <div style="display:flex;gap:5px">
+              <select id="my-year" class="sel-sm" style="height:30px;font-size:11.5px" onchange="state.year=this.value;render()"></select>
+              <select id="my-mon" class="sel-sm" style="height:30px;font-size:11.5px" onchange="state.mon=this.value;render()"></select>
+            </div>
+          </div>
+          <div class="card" style="padding:4px 15px" id="my-group-list"></div>
+        </div>
+        <div style="padding:18px 18px 0">
+          <div class="section-title" style="margin-bottom:9px">재무 목표</div>
+          <div class="goal-card">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+              <input id="goal-name" class="inp-sm" style="flex:1" placeholder="목표 이름" onchange="state.goal.name=this.value">
+              <input id="goal-target" class="inp-sm" style="width:110px;text-align:right" placeholder="목표 금액" inputmode="numeric" onchange="state.goal.target=this.value.replace(/[^0-9]/g,'')">
+              <span style="font-size:12px;color:var(--faint)">원</span>
+            </div>
+            <div id="goal-bar-wrap" class="bar-row"><div id="goal-bar" class="bar-fill" style="background:var(--blue)"></div></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:7px">
+              <div id="goal-rate" style="font-size:12.5px;font-weight:600;color:var(--blue)"></div>
+              <div id="goal-remain" style="font-size:10.5px;color:var(--faint)"></div>
+            </div>
+          </div>
+        </div>
+        <div style="padding:18px 18px 24px">
+          <button onclick="logout()" class="logout-btn">로그아웃</button>
+        </div>
+      </div>
+
+    </div><!-- /s-app -->
+  </div><!-- /scroll-area -->
+
+  <!-- Bottom tab bar -->
+  <div id="tab-bar" class="tab-bar" style="display:none">
+    <button class="tab-btn" id="tb-dash" onclick="switchTab('dash')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      대시보드
+    </button>
+    <button class="tab-btn" id="tb-ledger" onclick="switchTab('ledger')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 10h16M4 14h10M4 18h7"/></svg>
+      가계부
+    </button>
+    <button class="tab-plus" onclick="switchTab('input')">＋</button>
+    <button class="tab-btn" id="tb-assets" onclick="switchTab('assets')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      자산
+    </button>
+    <button class="tab-btn" id="tb-mypage" onclick="switchTab('mypage')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      MY
+    </button>
   </div>
 
-</div>
+  <div id="toast" class="toast"></div>
+</div><!-- /phone -->
+</div><!-- /frame-wrap -->
 
-<div class="footer">
-  ASSET 프로젝트 · 가계부 & 자산관리 앱 · 목업 v1.0
-</div>
-
-<script>
-// Auto-scale iframes to fit 200px thumb height
-document.querySelectorAll('.screen-card-thumb iframe').forEach(function(fr){
-  var thumb=fr.parentElement;
-  var thumbH=thumb.offsetHeight||200;
-  var scale=thumbH/844;
-  fr.style.transform='scale('+scale+')';
-  fr.style.width='390px';
-  fr.style.height='844px';
-});
-window.addEventListener('resize',function(){
-  document.querySelectorAll('.screen-card-thumb iframe').forEach(function(fr){
-    var thumbH=fr.parentElement.offsetHeight||200;
-    var scale=thumbH/844;
-    fr.style.transform='scale('+scale+')';
-  });
-});
-</script>
+<script type="module" src="/src/main.js"></script>
 </body>
 </html>
