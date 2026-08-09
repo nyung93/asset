@@ -220,7 +220,7 @@ async function doSignup() {
 
 function shuffleQs() {
   const pool = [...QPOOL], out = [];
-  while (out.length < 3 && pool.length) out.push(pool.splice(Math.floor(Math.random()*pool.length), 1)[0]);
+  while (out.length < 1 && pool.length) out.push(pool.splice(Math.floor(Math.random()*pool.length), 1)[0]);
   state.signupQs = out;
   renderSignupQs();
 }
@@ -732,27 +732,44 @@ Object.assign(window, {
 });
 
 // ─────────────────────────────────────────
+//  STATUS BAR 시계
+// ─────────────────────────────────────────
+function updateClock() {
+  const el = document.getElementById('status-time');
+  if (!el) return;
+  const d = new Date();
+  el.textContent = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// ─────────────────────────────────────────
 //  INIT — Firestore에서 계정 목록 로드
 // ─────────────────────────────────────────
 async function init() {
   setLoading(true);
+  const timeout = new Promise(resolve => setTimeout(resolve, 8000));
   try {
-    const accounts = await fetchAccounts();
-    if (accounts.length === 0) {
-      // 최초 실행: 기본 계정 Firestore에 저장
-      const defaultAcct = state.accounts[0];
-      await saveAccount(defaultAcct);
-      await saveUserData(defaultAcct.id, {
-        txs:[], assets:[], budgets:{},
-        cats: DEF_CATS.slice(), groups: GROUPS.slice(),
-        profile: { name: defaultAcct.name, age:'' },
-        goal: { name:'목표 설정', target:'0' }
-      });
-    } else {
-      state.accounts = accounts;
-    }
+    await Promise.race([
+      (async () => {
+        const accounts = await fetchAccounts();
+        if (accounts.length === 0) {
+          const defaultAcct = state.accounts[0];
+          await saveAccount(defaultAcct);
+          await saveUserData(defaultAcct.id, {
+            txs:[], assets:[], budgets:{},
+            cats: DEF_CATS.slice(), groups: GROUPS.slice(),
+            profile: { name: defaultAcct.name, age:'' },
+            goal: { name:'목표 설정', target:'0' }
+          });
+        } else {
+          state.accounts = accounts;
+        }
+      })(),
+      timeout
+    ]);
   } catch(e) {
-    console.warn('Firestore 초기화 실패 (오프라인?)', e);
+    console.warn('Firestore 초기화 실패:', e);
   }
   setLoading(false);
   state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];

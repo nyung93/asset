@@ -159,6 +159,9 @@ a{color:var(--blue)}
 .asset-input-row:last-child{border-bottom:none}
 .add-asset-box{background:var(--card);border-radius:var(--r-card);border:1px dashed #c9d3e2;padding:15px}
 
+/* ── ADMIN ── */
+.admin-header{background:var(--blue);color:#fff;padding:20px 18px 18px}
+
 /* ── MYPAGE ── */
 .my-header{background:var(--card);padding:20px 18px 18px;border-bottom:1px solid var(--line)}
 .my-profile-row{display:flex;align-items:center;gap:14px}
@@ -171,3 +174,44 @@ a{color:var(--blue)}
 .my-field-lbl{font-size:10.5px;color:var(--faint);width:26px;flex:none}
 .goal-card{padding:15px;background:var(--card);border-radius:var(--r-card);border:1px solid var(--line);box-shadow:var(--sh)}
 .logout-btn{height:44px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);border:none;font-size:14px;font-weight:600;cursor:pointer;width:100%}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 480px) {
+  html,body{
+    background:var(--bg);
+    height:100dvh;
+    overflow:hidden;
+  }
+  .frame-wrap{
+    padding:0;
+    min-height:100dvh;
+    align-items:stretch;
+  }
+  .phone{
+    width:100%;
+    height:100dvh;
+    border-radius:0;
+    box-shadow:none;
+    border:none;
+  }
+  /* 노치(상단 safe area) */
+  .status-bar{
+    height:calc(44px + env(safe-area-inset-top, 0px));
+    padding-top:env(safe-area-inset-top, 0px);
+  }
+  /* 홈바(하단 safe area) */
+  .tab-bar{
+    height:calc(70px + env(safe-area-inset-bottom, 0px));
+    padding-bottom:env(safe-area-inset-bottom, 0px);
+  }
+  /* 로딩 오버레이 모서리 제거 */
+  #loading-overlay{
+    border-radius:0 !important;
+  }
+  /* 터치 환경 버튼 높이 확보 */
+  .btn-blue,.btn-outline{height:52px;font-size:15px}
+  .tab-btn{font-size:11px}
+  /* 폼 입력 확대 방지 (iOS는 16px 미만 시 자동 줌) */
+  .inp,.inp-sm,select{font-size:16px}
+  .inp{height:50px}
+}
