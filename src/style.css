@@ -175,6 +175,11 @@ a{color:var(--blue)}
 .goal-card{padding:15px;background:var(--card);border-radius:var(--r-card);border:1px solid var(--line);box-shadow:var(--sh)}
 .logout-btn{height:44px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);border:none;font-size:14px;font-weight:600;cursor:pointer;width:100%}
 
+/* ── MODAL ── */
+.modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);z-index:300;display:flex;align-items:flex-end;border-radius:26px}
+.modal-box{background:var(--card);width:100%;border-radius:18px 18px 0 0;padding:22px 20px 28px;max-height:85%;overflow-y:auto}
+.modal-title{font-size:15px;font-weight:700;color:var(--ink);margin-bottom:16px}
+
 /* ── MOBILE RESPONSIVE ── */
 @media (max-width: 480px) {
   html,body{
@@ -207,6 +212,9 @@ a{color:var(--blue)}
   /* 로딩 오버레이 모서리 제거 */
   #loading-overlay{
     border-radius:0 !important;
+  }
+  .modal-backdrop{
+    border-radius:0;
   }
   /* 터치 환경 버튼 높이 확보 */
   .btn-blue,.btn-outline{height:52px;font-size:15px}
