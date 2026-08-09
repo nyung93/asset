@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="description" content="가계부 & 자산관리 앱 — 수입·지출·자산을 한 곳에서">
 <meta name="theme-color" content="#1a57d6">
 <title>가계부 & 자산관리 앱</title>
@@ -20,7 +20,7 @@
 
   <!-- Status bar -->
   <div class="status-bar" id="status-bar" style="background:var(--blue);color:#fff">
-    <span>9:41</span>
+    <span id="status-time"></span>
     <div style="display:flex;gap:5px;align-items:center">
       <span style="width:15px;height:8px;border-radius:3px;border:1px solid currentColor;opacity:.6"></span>
       <span style="width:15px;height:8px;border-radius:3px;background:currentColor;opacity:.85"></span>
@@ -80,7 +80,7 @@
     <!-- ── SIGNUP ── -->
     <div id="s-signup" class="screen">
       <div class="auth-wrap">
-        <div class="auth-back" onclick="go('landing')">‹ 메인</div>
+        <div class="auth-back" onclick="go('login')">‹ 로그인</div>
         <div class="auth-title">회원가입</div>
         <div class="auth-sub">비밀번호는 저장 시 암호화됩니다.</div>
         <div id="signup-notice"></div>
