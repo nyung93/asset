@@ -239,8 +239,15 @@
           <div class="card" style="padding:6px 15px" id="l-budget"></div>
         </div>
         <div style="padding:18px 18px 24px">
-          <div class="section-hd"><div id="l-tx-title" class="section-title">원자료</div><div class="section-more" onclick="switchTab('input')">입력하기 ›</div></div>
-          <div class="card" id="l-tx-list"></div>
+          <div class="section-hd">
+            <div id="l-tx-title" class="section-title">원자료</div>
+            <div style="display:flex;gap:10px;align-items:center">
+              <span class="section-more" onclick="go('ledger-detail')">자세히 보기 ›</span>
+              <span class="section-more" onclick="switchTab('input')">입력하기 ›</span>
+            </div>
+          </div>
+          <div id="l-tx-list"></div>
+          <div id="l-tx-pages" style="padding:0 0 4px"></div>
         </div>
       </div>
 
@@ -351,6 +358,11 @@
     <!-- ── CAT MANAGE ── -->
     <div id="s-cat-manage" class="screen">
       <div style="padding:16px 18px 100px" id="cat-manage-body"></div>
+    </div>
+
+    <!-- ── LEDGER DETAIL ── -->
+    <div id="s-ledger-detail" class="screen">
+      <div style="padding:16px 18px 100px" id="ledger-detail-body"></div>
     </div>
 
   </div><!-- /scroll-area -->

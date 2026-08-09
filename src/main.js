@@ -50,6 +50,7 @@ const CUSTOM_PALETTES = [
   {key:'gray',  label:'회색',  c:'#7a8896', bg:'#edf0f4', fg:'#5a6672'},
 ];
 let _selGroupColor='blue'; // 대분류 추가 시 선택 색상
+let _txDetail={page:0,pageSize:10,dateFrom:'',dateTo:'',group:'',cat:''}; // 원자료 자세히 보기 필터
 
 const hashFn = s => { let h=5381,t=String(s); for(let i=0;i<t.length;i++) h=(((h<<5)+h)^t.charCodeAt(i))>>>0; return 'sha·'+h.toString(36)+t.length.toString(36); };
 const won   = n => '₩'+Math.round(n).toLocaleString('ko-KR');
@@ -76,6 +77,7 @@ const state = {
   drafts:[], signupQs:[], findMode:'id', findQIdx:0,
   newAssetType:'현금', seq:100,
   editingTx:null, editingTxData:null,
+  txPage:0,
   _editProfilePhoto:undefined   // undefined = not changed; null = remove; string = new photo
 };
 function nid() { return ++state.seq; }
@@ -478,7 +480,8 @@ function saveEditTx() {
   };
   state.editingTx=null;state.editingTxData=null;
   const el=document.getElementById('tx-edit-modal');if(el)el.remove();
-  bgSave();render();
+  bgSave();
+  if(state.screen==='ledger-detail') renderLedgerDetail(); else render();
 }
 function closeEditTx() {
   state.editingTx=null;state.editingTxData=null;
@@ -658,7 +661,7 @@ function showToast(msg) { const el=document.getElementById('toast'); el.textCont
 
 // ── RENDER ──
 function render() {
-  ['s-landing','s-login','s-signup','s-find','s-admin','s-app','s-budget-input','s-cat-manage'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['s-landing','s-login','s-signup','s-find','s-admin','s-app','s-budget-input','s-cat-manage','s-ledger-detail'].forEach(id=>document.getElementById(id).classList.remove('active'));
   const sb=document.getElementById('status-bar'), tb=document.getElementById('tab-bar');
   if(state.screen==='landing') {
     document.getElementById('s-landing').classList.add('active');
@@ -685,6 +688,10 @@ function render() {
     document.getElementById('s-cat-manage').classList.add('active');
     sb.style.background='var(--bg)';sb.style.color='var(--ink)';tb.style.display='none';
     renderCatManage();
+  } else if(state.screen==='ledger-detail') {
+    document.getElementById('s-ledger-detail').classList.add('active');
+    sb.style.background='var(--bg)';sb.style.color='var(--ink)';tb.style.display='none';
+    renderLedgerDetail();
   } else if(state.screen==='app') {
     document.getElementById('s-app').classList.add('active');
     tb.style.display='flex';
@@ -777,24 +784,174 @@ function renderLedger() {
     }).join('')}`;
   // 거래 목록 (수정·삭제)
   const txs=monthTxs(keys);
+  const TX_PAGE_SIZE=10;
+  const txTotalPages=Math.max(1,Math.ceil(txs.length/TX_PAGE_SIZE));
+  if(state.txPage>=txTotalPages) state.txPage=txTotalPages-1;
+  const pageTxs=txs.slice(state.txPage*TX_PAGE_SIZE,(state.txPage+1)*TX_PAGE_SIZE);
   document.getElementById('l-tx-title').textContent='원자료 '+txs.length+'건';
-  document.getElementById('l-tx-list').innerHTML=txs.length?txs.map(t=>`
-    <div style="display:flex;gap:10px;padding:12px 15px;border-bottom:1px solid var(--line)">
-      <div style="font-size:10.5px;color:var(--faint);flex:none;width:34px;line-height:1.6">${t.date.slice(5)}</div>
-      <div style="flex:1;min-width:0">
-        <div class="tx-top"><span class="tx-name">${t.name}</span><span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span></div>
-        <div class="tx-meta">
-          <span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span>
-          <span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span>
-          <span style="flex:1"></span>
-          <span onclick="openEditTx(${t.id})" style="font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;padding:2px 6px">수정</span>
-          <span style="font-size:11px;color:var(--line)">|</span>
-          <span onclick="deleteTx(${t.id})" style="font-size:11px;color:var(--red);cursor:pointer;font-weight:600;padding:2px 6px">삭제</span>
+  document.getElementById('l-tx-list').innerHTML=txs.length?`
+    <div class="card" style="padding:0;overflow:hidden">
+      ${pageTxs.map(t=>`
+      <div style="display:flex;gap:10px;padding:11px 15px;border-bottom:1px solid var(--line)">
+        <div style="font-size:10.5px;color:var(--faint);flex:none;width:34px;line-height:1.7">${t.date.slice(5)}</div>
+        <div style="flex:1;min-width:0">
+          <div class="tx-top"><span class="tx-name">${t.name}</span><span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span></div>
+          <div class="tx-meta">
+            <span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span>
+            <span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span>
+            <span style="flex:1"></span>
+            <span onclick="openEditTx(${t.id})" style="font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;padding:2px 6px">수정</span>
+            <span style="font-size:11px;color:var(--line)">|</span>
+            <span onclick="deleteTx(${t.id})" style="font-size:11px;color:var(--red);cursor:pointer;font-weight:600;padding:2px 6px">삭제</span>
+          </div>
         </div>
-      </div>
-    </div>`).join(''):'<div style="padding:22px;text-align:center;font-size:12px;color:var(--faint)">이 달의 원자료가 없습니다.<br><span style="color:var(--blue);cursor:pointer" onclick="switchTab(\'input\')">입력하러 가기</span></div>';
+      </div>`).join('')}
+    </div>`
+    :'<div style="padding:22px;text-align:center;font-size:12px;color:var(--faint)">이 달의 원자료가 없습니다.<br><span style="color:var(--blue);cursor:pointer" onclick="switchTab(\'input\')">입력하러 가기</span></div>';
+  document.getElementById('l-tx-pages').innerHTML=txTotalPages>1?`
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 0">
+      <button onclick="setTxPage(${state.txPage-1})"
+              style="width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center${state.txPage===0?';opacity:.3;pointer-events:none':''}">&lt;</button>
+      ${Array.from({length:txTotalPages},(_,i)=>`
+        <button onclick="setTxPage(${i})"
+                style="width:30px;height:30px;border-radius:50%;border:1px solid ${i===state.txPage?'var(--blue)':'var(--line)'};background:${i===state.txPage?'var(--blue)':'var(--card)'};color:${i===state.txPage?'#fff':'var(--ink)'};cursor:pointer;font-size:12px;font-weight:${i===state.txPage?'700':'400'}">${i+1}</button>
+      `).join('')}
+      <button onclick="setTxPage(${state.txPage+1})"
+              style="width:30px;height:30px;border-radius:50%;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center${state.txPage===txTotalPages-1?';opacity:.3;pointer-events:none':''}">&gt;</button>
+    </div>`:'';
+}
+function setTxPage(p){
+  const keys=currentKeys();
+  const txs=monthTxs(keys);
+  const total=Math.max(1,Math.ceil(txs.length/10));
+  state.txPage=Math.max(0,Math.min(p,total-1));
+  renderLedger();
 }
 function toggleGroup(g) { state.openGroups[g]=!state.openGroups[g];renderLedger(); }
+
+// ── LEDGER DETAIL (원자료 자세히 보기) ──
+function renderLedgerDetail() {
+  const el=document.getElementById('ledger-detail-body'); if(!el)return;
+  // 필터 적용
+  let filtered=state.txs.slice().sort((a,b)=>b.date.localeCompare(a.date));
+  if(_txDetail.dateFrom) filtered=filtered.filter(t=>t.date>=_txDetail.dateFrom);
+  if(_txDetail.dateTo)   filtered=filtered.filter(t=>t.date<=_txDetail.dateTo);
+  if(_txDetail.group)    filtered=filtered.filter(t=>t.group===_txDetail.group);
+  if(_txDetail.cat)      filtered=filtered.filter(t=>t.cat===_txDetail.cat);
+
+  const ps=_txDetail.pageSize;
+  const totalPages=Math.max(1,Math.ceil(filtered.length/ps));
+  if(_txDetail.page>=totalPages) _txDetail.page=totalPages-1;
+  const pageTxs=filtered.slice(_txDetail.page*ps,(_txDetail.page+1)*ps);
+
+  // 현재 선택 그룹에 맞는 카테고리 목록
+  const catOptions=(_txDetail.group
+    ? state.cats.filter(c=>c.group===_txDetail.group)
+    : state.cats
+  ).map(c=>c.name).filter((v,i,a)=>a.indexOf(v)===i);
+
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <div onclick="goApp('ledger')" style="width:34px;height:34px;border-radius:50%;background:var(--track);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--ink);line-height:1">‹</div>
+      <div style="font-size:17px;font-weight:700;color:var(--ink)">원자료 전체</div>
+      <span style="font-size:12px;color:var(--muted);margin-left:4px">${filtered.length}건</span>
+    </div>
+    <!-- 검색 필터 -->
+    <div class="card" style="padding:14px 15px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:11px">검색 조건</div>
+      <div class="lbl">기간</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
+        <input type="date" class="inp-sm" style="flex:1" value="${_txDetail.dateFrom}"
+               onchange="_txDetail.dateFrom=this.value;_txDetail.page=0;renderLedgerDetail()">
+        <span style="font-size:12px;color:var(--faint)">~</span>
+        <input type="date" class="inp-sm" style="flex:1" value="${_txDetail.dateTo}"
+               onchange="_txDetail.dateTo=this.value;_txDetail.page=0;renderLedgerDetail()">
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:11px">
+        <div style="flex:1">
+          <div class="lbl">대분류</div>
+          <select class="sel-sm" style="width:100%;height:36px" onchange="setDetailGroup(this.value)">
+            <option value="">전체</option>
+            ${state.groups.map(g=>`<option value="${g}" ${_txDetail.group===g?'selected':''}>${g}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1">
+          <div class="lbl">카테고리</div>
+          <select class="sel-sm" style="width:100%;height:36px" onchange="_txDetail.cat=this.value;_txDetail.page=0;renderLedgerDetail()">
+            <option value="">전체</option>
+            ${catOptions.map(c=>`<option value="${c}" ${_txDetail.cat===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <button onclick="resetDetailFilter()" class="btn-outline" style="height:36px;font-size:12.5px;width:100%">필터 초기화</button>
+    </div>
+    <!-- 결과 헤더 -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="font-size:12px;color:var(--muted)">
+        ${filtered.length}건 · ${_txDetail.page*ps+1}~${Math.min((_txDetail.page+1)*ps,filtered.length)}번째
+      </div>
+      <select class="sel-sm" style="height:30px;font-size:11.5px" onchange="_txDetail.pageSize=Number(this.value);_txDetail.page=0;renderLedgerDetail()">
+        ${[10,20,50].map(n=>`<option value="${n}" ${ps===n?'selected':''}>${n}개씩</option>`).join('')}
+      </select>
+    </div>
+    <!-- 거래 목록 -->
+    ${filtered.length?`
+    <div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
+      ${pageTxs.map(t=>`
+      <div style="display:flex;gap:10px;padding:11px 15px;border-bottom:1px solid var(--line)">
+        <div style="font-size:10px;color:var(--faint);flex:none;width:52px;line-height:1.8">${t.date.slice(5)}</div>
+        <div style="flex:1;min-width:0">
+          <div class="tx-top"><span class="tx-name">${t.name}</span><span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span></div>
+          <div class="tx-meta">
+            <span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span>
+            <span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span>
+            <span style="flex:1"></span>
+            <span onclick="openEditTxFromDetail(${t.id})" style="font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;padding:2px 6px">수정</span>
+            <span style="font-size:11px;color:var(--line)">|</span>
+            <span onclick="deleteTxFromDetail(${t.id})" style="font-size:11px;color:var(--red);cursor:pointer;font-weight:600;padding:2px 6px">삭제</span>
+          </div>
+          ${t.note?`<div style="font-size:10.5px;color:var(--faint);margin-top:3px">${t.note}</div>`:''}
+        </div>
+      </div>`).join('')}
+    </div>`
+    :`<div style="padding:32px;text-align:center;font-size:12px;color:var(--faint)">조건에 맞는 원자료가 없습니다.</div>`}
+    <!-- 페이지네이션 -->
+    ${totalPages>1?`
+    <div style="display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 0">
+      <button onclick="_txDetail.page=${_txDetail.page-1};renderLedgerDetail()"
+              style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:12px${_txDetail.page===0?';opacity:.3;pointer-events:none':''}">‹ 이전</button>
+      ${Array.from({length:Math.min(totalPages,7)},(_,i)=>{
+        let pg=i;
+        if(totalPages>7){
+          const start=Math.max(0,Math.min(_txDetail.page-3,totalPages-7));
+          pg=start+i;
+        }
+        return`<button onclick="_txDetail.page=${pg};renderLedgerDetail()"
+                  style="width:32px;height:32px;border-radius:8px;border:1px solid ${pg===_txDetail.page?'var(--blue)':'var(--line)'};background:${pg===_txDetail.page?'var(--blue)':'var(--card)'};color:${pg===_txDetail.page?'#fff':'var(--ink)'};cursor:pointer;font-size:12px;font-weight:${pg===_txDetail.page?'700':'400'}">${pg+1}</button>`;
+      }).join('')}
+      <button onclick="_txDetail.page=${_txDetail.page+1};renderLedgerDetail()"
+              style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:12px${_txDetail.page===totalPages-1?';opacity:.3;pointer-events:none':''}">다음 ›</button>
+    </div>`:''}`;
+}
+function setDetailGroup(g) {
+  _txDetail.group=g; _txDetail.cat=''; _txDetail.page=0;
+  renderLedgerDetail();
+}
+function resetDetailFilter() {
+  _txDetail={..._txDetail,dateFrom:'',dateTo:'',group:'',cat:'',page:0};
+  renderLedgerDetail();
+}
+function openEditTxFromDetail(id) {
+  state.editingTx=id;
+  const t=state.txs.find(t=>t.id===id);
+  if(t) state.editingTxData={...t};
+  renderTxModal(); // 모달을 ledger-detail 위에 띄움
+}
+function deleteTxFromDetail(id) {
+  if(!confirm('삭제하시겠습니까?'))return;
+  state.txs=state.txs.filter(t=>t.id!==id);
+  bgSave(); renderLedgerDetail();
+}
 
 // ── INPUT ──
 function renderInput() {
@@ -1378,6 +1535,7 @@ Object.assign(window,{
   deleteTx,openEditTx,updateEditTx,saveEditTx,closeEditTx,
   addAsset,setAssetAmount,toggleAssetCheck,deleteAsset,renderAssets,
   setBudget,catBudgetKey,catBudget,groupBudgetTotal,catActual,getBudgetMode,setBudgetMode,toggleGroup,render,
+  setTxPage,renderLedgerDetail,setDetailGroup,resetDetailFilter,openEditTxFromDetail,deleteTxFromDetail,
   openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload,
   goApp,renderBudgetInput,renderCatManage,
   setBudgetAndRefresh,clearGroupBudget,fillFromLastMonth,
