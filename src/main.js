@@ -560,7 +560,7 @@ function showToast(msg) { const el=document.getElementById('toast'); el.textCont
 
 // ── RENDER ──
 function render() {
-  ['s-landing','s-login','s-signup','s-find','s-admin','s-app'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['s-landing','s-login','s-signup','s-find','s-admin','s-app','s-budget-input','s-cat-manage'].forEach(id=>document.getElementById(id).classList.remove('active'));
   const sb=document.getElementById('status-bar'), tb=document.getElementById('tab-bar');
   if(state.screen==='landing') {
     document.getElementById('s-landing').classList.add('active');
@@ -579,6 +579,14 @@ function render() {
     document.getElementById('s-admin').classList.add('active');
     sb.style.background='var(--blue)';sb.style.color='#fff';tb.style.display='none';
     renderAdmin();
+  } else if(state.screen==='budget-input') {
+    document.getElementById('s-budget-input').classList.add('active');
+    sb.style.background='var(--bg)';sb.style.color='var(--ink)';tb.style.display='none';
+    renderBudgetInput();
+  } else if(state.screen==='cat-manage') {
+    document.getElementById('s-cat-manage').classList.add('active');
+    sb.style.background='var(--bg)';sb.style.color='var(--ink)';tb.style.display='none';
+    renderCatManage();
   } else if(state.screen==='app') {
     document.getElementById('s-app').classList.add('active');
     tb.style.display='flex';
@@ -728,6 +736,156 @@ function renderAssetSummary() {
   const sub=document.getElementById('a-sub');if(sub)sub.textContent='부채 '+won(dt)+' · 순자산 '+won(nw);
 }
 
+// ── BUDGET INPUT SCREEN ──
+function goApp(tab) {
+  state.screen='app'; state.tab=tab||'mypage';
+  history.pushState({screen:'app',tab:state.tab},'');
+  render();
+  document.getElementById('scroll-area').scrollTop=0;
+}
+
+function renderBudgetInput() {
+  const keys=currentKeys();
+  const bud=budgetFor(monthKey());
+  const budGroups=state.groups.filter(g=>g!=='수입');
+  const totalBudget=budGroups.reduce((s,g)=>s+num(bud[g]||0),0);
+  const totalActual=budGroups.reduce((s,g)=>s+groupSum(keys,g),0);
+  const rate=totalBudget?Math.min(100,totalActual/totalBudget*100):0;
+  const rc=rate>100?'var(--red)':rate>80?'var(--amber)':'var(--blue)';
+  const prevMon=Number(state.mon)===1?(Number(state.year)-1)+'년 12':state.year+'년 '+(Number(state.mon)-1);
+  const el=document.getElementById('budget-input-body'); if(!el)return;
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <div onclick="goApp('mypage')" style="width:34px;height:34px;border-radius:50%;background:var(--track);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--ink);line-height:1">‹</div>
+      <div style="font-size:17px;font-weight:700;color:var(--ink)">월 예산 입력</div>
+      <div style="flex:1"></div>
+      <select class="sel-sm" style="height:30px;font-size:11.5px" onchange="state.year=this.value;renderBudgetInput()">
+        ${[Number(state.year)-1,Number(state.year),Number(state.year)+1].map(y=>`<option value="${y}" ${y===Number(state.year)?'selected':''}>${y}년</option>`).join('')}
+      </select>
+      <select class="sel-sm" style="height:30px;font-size:11.5px" onchange="state.mon=this.value;renderBudgetInput()">
+        ${[...Array(12)].map((_,i)=>{const m=String(i+1).padStart(2,'0');return`<option value="${m}" ${m===state.mon?'selected':''}>${i+1}월</option>`;}).join('')}
+      </select>
+    </div>
+    <div class="card" style="padding:14px 15px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px">월 예산 대비 집행률</div>
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+        <span style="font-size:26px;font-weight:800;color:${rc}">${totalBudget?pct(rate):'—'}</span>
+        ${totalBudget?`<span style="font-size:11.5px;color:var(--faint)">${won(totalActual)} / ${won(totalBudget)}</span>`:''}
+      </div>
+      ${totalBudget?`<div class="bar-row"><div class="bar-fill" style="background:${rc};width:${rate}%"></div></div>`:''}
+    </div>
+    <div class="card" style="padding:0 0 4px;margin-bottom:10px">
+      ${budGroups.map(g=>{
+        const b=num(bud[g]||0),a=groupSum(keys,g),r=b?a/b*100:0;
+        const c2=r>100?'var(--red)':r>80?'var(--amber)':'var(--green)';
+        return`<div style="padding:13px 15px;border-bottom:1px solid var(--line)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:${b?'8px':'0'}">
+            <span class="badge" style="background:${gc(g).bg};color:${gc(g).fg};flex:none">${g}</span>
+            <span style="flex:1"></span>
+            ${b?`<span onclick="clearGroupBudget('${g}')" style="font-size:16px;color:var(--faint);cursor:pointer;padding:2px 6px;line-height:1">×</span>`:''}
+            <input class="inp-sm" inputmode="numeric" style="width:120px;text-align:right;height:36px"
+                   value="${b||''}" placeholder="예산 미설정"
+                   onchange="setBudgetAndRefresh('${g}',this.value)">
+          </div>
+          ${b?`
+          <div class="bar-row" style="margin-bottom:5px"><div class="bar-fill" style="background:${c2};width:${Math.min(100,r)}%"></div></div>
+          <div style="display:flex;justify-content:space-between;font-size:10.5px;color:var(--faint)">
+            <span>실적 ${won(a)} · <span style="color:${c2};font-weight:600">${pct(r)}</span></span>
+            <span>${won(Math.max(0,b-a))} 남음</span>
+          </div>`:`<div style="font-size:10.5px;color:var(--faint);margin-top:3px">실적 ${won(a)}</div>`}
+        </div>`;
+      }).join('')}
+    </div>
+    <button onclick="fillFromLastMonth()" class="btn-outline" style="height:44px;font-size:13px">
+      ${prevMon}월 실적으로 채우기
+    </button>`;
+}
+
+function setBudgetAndRefresh(group,val) { setBudget(group,val); renderBudgetInput(); }
+
+function clearGroupBudget(group) {
+  const mk=monthKey();
+  if(state.budgets[mk]) state.budgets[mk][group]=0;
+  bgSave(); renderBudgetInput();
+}
+
+function fillFromLastMonth() {
+  const prevK=prevKeys()[0];
+  const mk=monthKey();
+  if(!state.budgets[mk]) state.budgets[mk]={};
+  state.groups.filter(g=>g!=='수입').forEach(g=>{
+    const actual=state.txs.filter(t=>t.date.replace(/-/g,'').slice(0,6)===prevK&&t.group===g).reduce((s,t)=>s+num(t.amount),0);
+    if(actual>0) state.budgets[mk][g]=actual;
+  });
+  bgSave(); renderBudgetInput(); showToast('전월 실적으로 예산을 채웠습니다.');
+}
+
+// ── CATEGORY MANAGE SCREEN ──
+function renderCatManage() {
+  const keys=currentKeys();
+  const el=document.getElementById('cat-manage-body'); if(!el)return;
+  el.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
+      <div onclick="goApp('mypage')" style="width:34px;height:34px;border-radius:50%;background:var(--track);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--ink);line-height:1">‹</div>
+      <div style="font-size:17px;font-weight:700;color:var(--ink)">카테고리 구분 관리</div>
+    </div>
+    ${state.groups.map(g=>{
+      const cats=state.cats.filter(c=>c.group===g);
+      const amt=groupSum(keys,g);
+      return`<div class="card" style="padding:14px 15px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
+          <span class="badge" style="background:${gc(g).bg};color:${gc(g).fg}">${g}</span>
+          <span style="font-size:11px;color:var(--faint)">${cats.length}개</span>
+          <span style="flex:1"></span>
+          <span style="font-size:13px;font-weight:600;color:var(--ink)">${won(amt)}</span>
+        </div>
+        <div class="chip-group" style="margin-bottom:10px">
+          ${cats.map(c=>`<div class="chip" style="background:${gc(g).bg};color:${gc(g).fg};border-color:${gc(g).c};display:flex;align-items:center;gap:4px;padding-right:4px">
+            ${c.name}<span onclick="removeCat('${g}','${c.name}')" style="font-size:14px;line-height:1;cursor:pointer;opacity:.65;margin-left:2px">×</span>
+          </div>`).join('')}
+        </div>
+        <div style="display:flex;gap:7px">
+          <input id="nc-${g.replace(/\//g,'-')}" class="inp-sm" style="flex:1" placeholder="새 카테고리"
+                 onkeydown="if(event.key==='Enter')addCat('${g}',this.value)">
+          <button onclick="addCat('${g}',document.getElementById('nc-${g.replace(/\//g,'-')}').value)"
+                  class="btn-outline" style="height:36px;font-size:12px;width:52px;padding:0">추가</button>
+        </div>
+      </div>`;
+    }).join('')}
+    <div class="card" style="padding:14px 15px;border:1.5px dashed var(--line);background:var(--bg)">
+      <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:3px">대분류 추가</div>
+      <div style="font-size:11px;color:var(--faint);margin-bottom:11px">대분류는 월별가계부의 합계 열이 됩니다.</div>
+      <div style="display:flex;gap:7px">
+        <input id="new-group-inp" class="inp-sm" style="flex:1" placeholder="예: 경조사"
+               onkeydown="if(event.key==='Enter')addGroup(this.value)">
+        <button onclick="addGroup(document.getElementById('new-group-inp').value)"
+                class="btn-blue" style="height:36px;font-size:12px;width:52px;padding:0">추가</button>
+      </div>
+    </div>`;
+}
+
+function addCat(group,name) {
+  name=(name||'').trim();
+  if(!name){showToast('카테고리 이름을 입력하세요.');return;}
+  if(state.cats.some(c=>c.group===group&&c.name===name)){showToast('이미 존재하는 카테고리입니다.');return;}
+  state.cats.push({name,group}); bgSave(); renderCatManage();
+}
+function removeCat(group,catName) {
+  if(!confirm(`'${catName}' 카테고리를 삭제하시겠습니까?`))return;
+  state.cats=state.cats.filter(c=>!(c.group===group&&c.name===catName)); bgSave(); renderCatManage();
+}
+function addGroup(name) {
+  name=(name||'').trim();
+  if(!name){showToast('대분류 이름을 입력하세요.');return;}
+  if(state.groups.includes(name)){showToast('이미 존재하는 대분류입니다.');return;}
+  state.groups.push(name); bgSave(); renderCatManage();
+}
+
+// ── RESET ──
+function resetLedger()  { if(!confirm('입력한 원자료와 월별 합계를 모두 지웁니다. 계속하시겠습니까?'))return; state.txs=[];bgSave();renderMypage();showToast('가계부를 초기화했습니다.'); }
+function resetAssets()  { if(!confirm('등록된 계좌·자산 전체를 지웁니다. 계속하시겠습니까?'))return;    state.assets=[];bgSave();renderMypage();showToast('자산을 초기화했습니다.'); }
+function resetBudgets() { if(!confirm('모든 월의 예산 설정을 지웁니다. 계속하시겠습니까?'))return;      state.budgets={};bgSave();renderMypage();showToast('예산을 초기화했습니다.'); }
+
 // ── MYPAGE ──
 function renderMypage() {
   const keys=currentKeys(),prevK=prevKeys();
@@ -753,6 +911,86 @@ function renderMypage() {
   const ni=document.getElementById('my-name-display');if(ni) ni.textContent=state.profile.name||'—';
   const ai=document.getElementById('my-age-display');if(ai) ai.textContent=state.profile.age?(state.profile.age+'세'):'—';
 
+  // ── 예산 집행률 카드 ──
+  const bud=budgetFor(monthKey());
+  const budGroups=state.groups.filter(g=>g!=='수입');
+  const totalBudget=budGroups.reduce((s,g)=>s+num(bud[g]||0),0);
+  const totalActual=budGroups.reduce((s,g)=>s+groupSum(keys,g),0);
+  const overallRate=totalBudget?Math.min(100,totalActual/totalBudget*100):0;
+  const orc=overallRate>100?'var(--red)':overallRate>80?'var(--amber)':'var(--blue)';
+  const budCard=document.getElementById('my-budget-card');
+  if(budCard){
+    if(totalBudget){
+      budCard.innerHTML=`<div class="card" style="padding:14px 15px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-size:12px;font-weight:700;color:var(--muted)">월 예산 대비 집행률</div>
+          <div style="font-size:10.5px;color:var(--faint)">${state.year}년 ${Number(state.mon)}월</div>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px">
+          <span style="font-size:28px;font-weight:800;color:${orc}">${pct(overallRate)}</span>
+          <span style="font-size:11.5px;color:var(--faint)">${won(totalActual)} / ${won(totalBudget)}</span>
+        </div>
+        <div class="bar-row" style="margin-bottom:12px"><div class="bar-fill" style="background:${orc};width:${overallRate}%"></div></div>
+        ${budGroups.filter(g=>num(bud[g]||0)>0).map(g=>{
+          const b=num(bud[g]||0),a=groupSum(keys,g),r=b?a/b*100:0;
+          const rc=r>100?'var(--red)':r>80?'var(--amber)':'var(--green)';
+          return`<div style="display:flex;align-items:center;padding:7px 0;border-top:1px solid var(--line)">
+            <span class="badge" style="background:${gc(g).bg};color:${gc(g).fg};flex:none;margin-right:8px">${g}</span>
+            <span style="font-size:12px;color:var(--ink);flex:1">${won(a)}<span style="color:var(--faint)"> / ${won(b)}</span></span>
+            <span style="font-size:11px;font-weight:600;color:${rc};margin-right:6px">${pct(r)}</span>
+            <span style="font-size:10.5px;color:var(--faint)">${won(Math.max(0,b-a))} 남음</span>
+          </div>`;
+        }).join('')}
+        <button onclick="go('budget-input')" class="btn-outline" style="margin-top:12px;height:40px;font-size:12.5px">월 예산 입력</button>
+      </div>`;
+    } else {
+      budCard.innerHTML=`<div class="card" style="padding:14px 15px;display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:3px">월 예산 대비 집행률</div>
+          <div style="font-size:11px;color:var(--faint)">예산을 설정하면 집행률이 표시됩니다.</div>
+        </div>
+        <button onclick="go('budget-input')" class="btn-outline" style="height:36px;font-size:12px;white-space:nowrap">예산 설정</button>
+      </div>`;
+    }
+  }
+  // ── 메뉴 섹션 ──
+  const menuSec=document.getElementById('my-menu-section');
+  if(menuSec) menuSec.innerHTML=`<div class="card" style="padding:0">
+    <div onclick="go('cat-manage')" style="display:flex;align-items:center;padding:15px 16px;border-bottom:1px solid var(--line);cursor:pointer">
+      <div style="width:34px;height:34px;border-radius:var(--r-md);background:var(--blue-tint);display:flex;align-items:center;justify-content:center;font-size:15px;margin-right:13px;flex:none">🗂</div>
+      <div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:var(--ink)">카테고리 구분 관리</div></div>
+      <span style="font-size:14px;color:var(--faint)">${state.cats.length}개 ›</span>
+    </div>
+    <div onclick="go('budget-input')" style="display:flex;align-items:center;padding:15px 16px;border-bottom:1px solid var(--line);cursor:pointer">
+      <div style="width:34px;height:34px;border-radius:var(--r-md);background:var(--green-tint);display:flex;align-items:center;justify-content:center;font-size:15px;margin-right:13px;flex:none">📊</div>
+      <div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:var(--ink)">월 예산 입력</div></div>
+      <span style="font-size:14px;color:var(--faint)">${totalBudget?won(totalBudget)+' ›':'›'}</span>
+    </div>
+    <div onclick="goApp('assets')" style="display:flex;align-items:center;padding:15px 16px;cursor:pointer">
+      <div style="width:34px;height:34px;border-radius:var(--r-md);background:var(--amber-tint);display:flex;align-items:center;justify-content:center;font-size:15px;margin-right:13px;flex:none">🏦</div>
+      <div style="flex:1"><div style="font-size:13.5px;font-weight:600;color:var(--ink)">자산현황 관리</div></div>
+      <span style="font-size:14px;color:var(--faint)">${state.assets.length}개 ›</span>
+    </div>
+  </div>`;
+  // ── 초기화 섹션 ──
+  const resetSec=document.getElementById('my-reset-section');
+  if(resetSec) resetSec.innerHTML=`
+    <div style="font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.04em;margin-bottom:8px;padding-left:2px">초기화</div>
+    <div class="card" style="padding:0">
+      <div style="display:flex;align-items:center;padding:14px 15px;border-bottom:1px solid var(--line)">
+        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--ink)">가계부 초기화</div><div style="font-size:11px;color:var(--faint);margin-top:2px">입력한 원자료와 월별 합계를 모두 지웁니다.</div></div>
+        <button onclick="resetLedger()" style="height:34px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);border:none;font-size:12px;font-weight:600;cursor:pointer;padding:0 14px">초기화</button>
+      </div>
+      <div style="display:flex;align-items:center;padding:14px 15px;border-bottom:1px solid var(--line)">
+        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--ink)">자산 초기화</div><div style="font-size:11px;color:var(--faint);margin-top:2px">등록된 계좌·자산 전체를 지웁니다.</div></div>
+        <button onclick="resetAssets()" style="height:34px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);border:none;font-size:12px;font-weight:600;cursor:pointer;padding:0 14px">초기화</button>
+      </div>
+      <div style="display:flex;align-items:center;padding:14px 15px">
+        <div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--ink)">예산 초기화</div><div style="font-size:11px;color:var(--faint);margin-top:2px">모든 월의 예산 설정을 지웁니다.</div></div>
+        <button onclick="resetBudgets()" style="height:34px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);border:none;font-size:12px;font-weight:600;cursor:pointer;padding:0 14px">초기화</button>
+      </div>
+    </div>`;
+
   document.getElementById('my-month-title').textContent=state.year+'년 '+Number(state.mon)+'월 대분류별 합계';
   document.getElementById('my-group-list').innerHTML=GROUPS.map(g=>{
     const amt=groupSum(keys,g),pv=groupSum(prevK,g),d=amt-pv;
@@ -775,7 +1013,11 @@ Object.assign(window,{
   deleteTx,openEditTx,updateEditTx,saveEditTx,closeEditTx,
   addAsset,setAssetAmount,toggleAssetCheck,deleteAsset,renderAssets,
   setBudget,toggleGroup,render,
-  openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload
+  openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload,
+  goApp,renderBudgetInput,renderCatManage,
+  setBudgetAndRefresh,clearGroupBudget,fillFromLastMonth,
+  addCat,removeCat,addGroup,
+  resetLedger,resetAssets,resetBudgets
 });
 
 // ── CLOCK ──
