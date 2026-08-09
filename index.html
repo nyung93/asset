@@ -251,7 +251,10 @@
             <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em">원자료 입력</div>
             <div id="inp-sub-label" style="font-size:11px;color:var(--muted);margin-top:3px"></div>
           </div>
-          <button onclick="addDraft()" style="font-size:12px;font-weight:500;color:#fff;background:var(--blue);padding:8px 13px;border-radius:var(--r-md);cursor:pointer;border:none">＋ 항목 추가</button>
+          <div style="display:flex;gap:8px">
+            <button onclick="openBulkImport()" style="font-size:12px;font-weight:500;color:var(--blue);background:var(--blue-tint,#e4ecfc);padding:8px 13px;border-radius:var(--r-md);cursor:pointer;border:none">엑셀 일괄입력</button>
+            <button onclick="addDraft()" style="font-size:12px;font-weight:500;color:#fff;background:var(--blue);padding:8px 13px;border-radius:var(--r-md);cursor:pointer;border:none">＋ 항목 추가</button>
+          </div>
         </div>
         <div style="padding:16px 18px 0" id="draft-list"></div>
         <div style="padding:16px 18px 24px">
