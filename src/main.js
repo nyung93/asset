@@ -148,6 +148,9 @@ function applyUserData(d,id) {
     state.profile={name:acct?acct.name:id,age:'',photo:null};
     state.goal={name:'목표 설정',target:'0'};
   }
+  // ID 충돌 방지: 기존 데이터의 최대 seq 값 이후부터 채번
+  const allIds=[...state.txs.map(t=>Number(t.id)||0),...state.assets.map(a=>Number(a.id)||0)];
+  if(allIds.length>0) state.seq=Math.max(state.seq,...allIds);
 }
 
 // ── NAVIGATION ──
@@ -245,7 +248,7 @@ async function doSignup() {
     await Promise.race([
       (async()=>{
         await saveAccount(acct);
-        await saveUserData(id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),profile:{name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
+        await saveUserData(id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),groupColors:{},budgetMode:{},profile:{name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
       })(),
       new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))
     ]);
@@ -830,9 +833,19 @@ function setTxPage(p){
 function toggleGroup(g) { state.openGroups[g]=!state.openGroups[g];renderLedger(); }
 
 // ── LEDGER DETAIL (원자료 자세히 보기) ──
+// _txDetail 뮤테이션을 window에 노출된 함수로만 처리 (모듈 스코프 직접 접근 불가)
+function goDetailPage(p)      { _txDetail.page=Number(p); renderLedgerDetail(); }
+function setDetailPageSize(n) { _txDetail.pageSize=Number(n); _txDetail.page=0; renderLedgerDetail(); }
+function setDetailDateFrom(v) { _txDetail.dateFrom=v; _txDetail.page=0; renderLedgerDetail(); }
+function setDetailDateTo(v)   { _txDetail.dateTo=v;   _txDetail.page=0; renderLedgerDetail(); }
+function setDetailCat(v)      { _txDetail.cat=v;       _txDetail.page=0; renderLedgerDetail(); }
+function setDetailGroup(g)    { _txDetail.group=g; _txDetail.cat=''; _txDetail.page=0; renderLedgerDetail(); }
+function resetDetailFilter()  { _txDetail={page:0,pageSize:_txDetail.pageSize,dateFrom:'',dateTo:'',group:'',cat:''}; renderLedgerDetail(); }
+
 function renderLedgerDetail() {
   const el=document.getElementById('ledger-detail-body'); if(!el)return;
-  // 필터 적용
+
+  // 필터 적용 (순서: 날짜 → 대분류 → 카테고리)
   let filtered=state.txs.slice().sort((a,b)=>b.date.localeCompare(a.date));
   if(_txDetail.dateFrom) filtered=filtered.filter(t=>t.date>=_txDetail.dateFrom);
   if(_txDetail.dateTo)   filtered=filtered.filter(t=>t.date<=_txDetail.dateTo);
@@ -841,31 +854,52 @@ function renderLedgerDetail() {
 
   const ps=_txDetail.pageSize;
   const totalPages=Math.max(1,Math.ceil(filtered.length/ps));
-  if(_txDetail.page>=totalPages) _txDetail.page=totalPages-1;
-  const pageTxs=filtered.slice(_txDetail.page*ps,(_txDetail.page+1)*ps);
+  if(_txDetail.page>=totalPages) _txDetail.page=Math.max(0,totalPages-1);
+  const start=_txDetail.page*ps;
+  const pageTxs=filtered.slice(start,start+ps);
 
-  // 현재 선택 그룹에 맞는 카테고리 목록
-  const catOptions=(_txDetail.group
-    ? state.cats.filter(c=>c.group===_txDetail.group)
-    : state.cats
-  ).map(c=>c.name).filter((v,i,a)=>a.indexOf(v)===i);
+  // 대분류가 선택된 경우만 해당 그룹의 카테고리 표시, 없으면 빈 목록
+  const catOptions=_txDetail.group
+    ? state.cats.filter(c=>c.group===_txDetail.group).map(c=>c.name)
+    : [];
+  const hasCatFilter=catOptions.length>0;
+
+  // 페이지 버튼 (최대 7개, 현재 페이지 중심)
+  const pageButtons=()=>{
+    if(totalPages<=1) return '';
+    const winSize=Math.min(totalPages,7);
+    const halfWin=Math.floor(winSize/2);
+    const winStart=Math.max(0,Math.min(_txDetail.page-halfWin,totalPages-winSize));
+    const pages=Array.from({length:winSize},(_,i)=>winStart+i);
+    return`<div style="display:flex;align-items:center;justify-content:center;gap:5px;padding:10px 0">
+      <button onclick="goDetailPage(${_txDetail.page-1})"
+              style="padding:6px 11px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:12px${_txDetail.page===0?';opacity:.3;pointer-events:none':''}">‹ 이전</button>
+      ${pages.map(pg=>`
+        <button onclick="goDetailPage(${pg})"
+                style="width:32px;height:32px;border-radius:8px;border:1.5px solid ${pg===_txDetail.page?'var(--blue)':'var(--line)'};background:${pg===_txDetail.page?'var(--blue)':'var(--card)'};color:${pg===_txDetail.page?'#fff':'var(--ink)'};cursor:pointer;font-size:12px;font-weight:${pg===_txDetail.page?700:400}">${pg+1}</button>
+      `).join('')}
+      <button onclick="goDetailPage(${_txDetail.page+1})"
+              style="padding:6px 11px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:12px${_txDetail.page===totalPages-1?';opacity:.3;pointer-events:none':''}">다음 ›</button>
+    </div>`;
+  };
 
   el.innerHTML=`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px">
       <div onclick="goApp('ledger')" style="width:34px;height:34px;border-radius:50%;background:var(--track);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;color:var(--ink);line-height:1">‹</div>
       <div style="font-size:17px;font-weight:700;color:var(--ink)">원자료 전체</div>
-      <span style="font-size:12px;color:var(--muted);margin-left:4px">${filtered.length}건</span>
+      <span style="font-size:12px;font-weight:600;color:var(--blue);margin-left:4px">${filtered.length}건</span>
     </div>
-    <!-- 검색 필터 -->
+
+    <!-- 검색 조건 -->
     <div class="card" style="padding:14px 15px;margin-bottom:12px">
       <div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:11px">검색 조건</div>
       <div class="lbl">기간</div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
         <input type="date" class="inp-sm" style="flex:1" value="${_txDetail.dateFrom}"
-               onchange="_txDetail.dateFrom=this.value;_txDetail.page=0;renderLedgerDetail()">
+               onchange="setDetailDateFrom(this.value)">
         <span style="font-size:12px;color:var(--faint)">~</span>
         <input type="date" class="inp-sm" style="flex:1" value="${_txDetail.dateTo}"
-               onchange="_txDetail.dateTo=this.value;_txDetail.page=0;renderLedgerDetail()">
+               onchange="setDetailDateTo(this.value)">
       </div>
       <div style="display:flex;gap:8px;margin-bottom:11px">
         <div style="flex:1">
@@ -877,75 +911,57 @@ function renderLedgerDetail() {
         </div>
         <div style="flex:1">
           <div class="lbl">카테고리</div>
-          <select class="sel-sm" style="width:100%;height:36px" onchange="_txDetail.cat=this.value;_txDetail.page=0;renderLedgerDetail()">
-            <option value="">전체</option>
+          <select class="sel-sm" style="width:100%;height:36px" onchange="setDetailCat(this.value)" ${!hasCatFilter?'disabled':''}>
+            <option value="">${hasCatFilter?'전체':'대분류 선택 후'}</option>
             ${catOptions.map(c=>`<option value="${c}" ${_txDetail.cat===c?'selected':''}>${c}</option>`).join('')}
           </select>
         </div>
       </div>
       <button onclick="resetDetailFilter()" class="btn-outline" style="height:36px;font-size:12.5px;width:100%">필터 초기화</button>
     </div>
+
     <!-- 결과 헤더 -->
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div style="font-size:12px;color:var(--muted)">
-        ${filtered.length}건 · ${_txDetail.page*ps+1}~${Math.min((_txDetail.page+1)*ps,filtered.length)}번째
+        ${filtered.length>0?`${start+1}–${Math.min(start+ps,filtered.length)} / 총 ${filtered.length}건`:'0건'}
       </div>
-      <select class="sel-sm" style="height:30px;font-size:11.5px" onchange="_txDetail.pageSize=Number(this.value);_txDetail.page=0;renderLedgerDetail()">
+      <select class="sel-sm" style="height:30px;font-size:11.5px" onchange="setDetailPageSize(this.value)">
         ${[10,20,50].map(n=>`<option value="${n}" ${ps===n?'selected':''}>${n}개씩</option>`).join('')}
       </select>
     </div>
+
     <!-- 거래 목록 -->
     ${filtered.length?`
-    <div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
-      ${pageTxs.map(t=>`
-      <div style="display:flex;gap:10px;padding:11px 15px;border-bottom:1px solid var(--line)">
-        <div style="font-size:10px;color:var(--faint);flex:none;width:52px;line-height:1.8">${t.date.slice(5)}</div>
-        <div style="flex:1;min-width:0">
-          <div class="tx-top"><span class="tx-name">${t.name}</span><span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span></div>
-          <div class="tx-meta">
-            <span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span>
-            <span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span>
-            <span style="flex:1"></span>
-            <span onclick="openEditTxFromDetail(${t.id})" style="font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;padding:2px 6px">수정</span>
-            <span style="font-size:11px;color:var(--line)">|</span>
-            <span onclick="deleteTxFromDetail(${t.id})" style="font-size:11px;color:var(--red);cursor:pointer;font-weight:600;padding:2px 6px">삭제</span>
+      <div class="card" style="padding:0;overflow:hidden;margin-bottom:10px">
+        ${pageTxs.map(t=>`
+        <div style="display:flex;gap:10px;padding:11px 15px;border-bottom:1px solid var(--line)">
+          <div style="font-size:10px;color:var(--faint);flex:none;width:44px;line-height:1.9">${t.date.slice(5)}</div>
+          <div style="flex:1;min-width:0">
+            <div class="tx-top">
+              <span class="tx-name">${t.name}</span>
+              <span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span>
+            </div>
+            <div class="tx-meta">
+              <span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span>
+              <span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span>
+              <span style="flex:1"></span>
+              <span onclick="openEditTxFromDetail(${t.id})" style="font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;padding:2px 6px">수정</span>
+              <span style="font-size:11px;color:var(--line)">|</span>
+              <span onclick="deleteTxFromDetail(${t.id})" style="font-size:11px;color:var(--red);cursor:pointer;font-weight:600;padding:2px 6px">삭제</span>
+            </div>
+            ${t.note?`<div style="font-size:10.5px;color:var(--faint);margin-top:3px">${t.note}</div>`:''}
           </div>
-          ${t.note?`<div style="font-size:10.5px;color:var(--faint);margin-top:3px">${t.note}</div>`:''}
-        </div>
-      </div>`).join('')}
-    </div>`
-    :`<div style="padding:32px;text-align:center;font-size:12px;color:var(--faint)">조건에 맞는 원자료가 없습니다.</div>`}
-    <!-- 페이지네이션 -->
-    ${totalPages>1?`
-    <div style="display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 0">
-      <button onclick="_txDetail.page=${_txDetail.page-1};renderLedgerDetail()"
-              style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:12px${_txDetail.page===0?';opacity:.3;pointer-events:none':''}">‹ 이전</button>
-      ${Array.from({length:Math.min(totalPages,7)},(_,i)=>{
-        let pg=i;
-        if(totalPages>7){
-          const start=Math.max(0,Math.min(_txDetail.page-3,totalPages-7));
-          pg=start+i;
-        }
-        return`<button onclick="_txDetail.page=${pg};renderLedgerDetail()"
-                  style="width:32px;height:32px;border-radius:8px;border:1px solid ${pg===_txDetail.page?'var(--blue)':'var(--line)'};background:${pg===_txDetail.page?'var(--blue)':'var(--card)'};color:${pg===_txDetail.page?'#fff':'var(--ink)'};cursor:pointer;font-size:12px;font-weight:${pg===_txDetail.page?'700':'400'}">${pg+1}</button>`;
-      }).join('')}
-      <button onclick="_txDetail.page=${_txDetail.page+1};renderLedgerDetail()"
-              style="padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-size:12px${_txDetail.page===totalPages-1?';opacity:.3;pointer-events:none':''}">다음 ›</button>
-    </div>`:''}`;
+        </div>`).join('')}
+      </div>
+      ${pageButtons()}`
+    :`<div style="padding:36px;text-align:center;font-size:12px;color:var(--faint)">조건에 맞는 원자료가 없습니다.</div>`}`;
 }
-function setDetailGroup(g) {
-  _txDetail.group=g; _txDetail.cat=''; _txDetail.page=0;
-  renderLedgerDetail();
-}
-function resetDetailFilter() {
-  _txDetail={..._txDetail,dateFrom:'',dateTo:'',group:'',cat:'',page:0};
-  renderLedgerDetail();
-}
+
 function openEditTxFromDetail(id) {
-  state.editingTx=id;
   const t=state.txs.find(t=>t.id===id);
-  if(t) state.editingTxData={...t};
-  renderTxModal(); // 모달을 ledger-detail 위에 띄움
+  if(!t) return;
+  state.editingTx=id; state.editingTxData={...t};
+  renderTxModal();
 }
 function deleteTxFromDetail(id) {
   if(!confirm('삭제하시겠습니까?'))return;
@@ -1535,7 +1551,9 @@ Object.assign(window,{
   deleteTx,openEditTx,updateEditTx,saveEditTx,closeEditTx,
   addAsset,setAssetAmount,toggleAssetCheck,deleteAsset,renderAssets,
   setBudget,catBudgetKey,catBudget,groupBudgetTotal,catActual,getBudgetMode,setBudgetMode,toggleGroup,render,
-  setTxPage,renderLedgerDetail,setDetailGroup,resetDetailFilter,openEditTxFromDetail,deleteTxFromDetail,
+  setTxPage,renderLedgerDetail,
+  goDetailPage,setDetailPageSize,setDetailDateFrom,setDetailDateTo,setDetailCat,setDetailGroup,resetDetailFilter,
+  openEditTxFromDetail,deleteTxFromDetail,
   openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload,
   goApp,renderBudgetInput,renderCatManage,
   setBudgetAndRefresh,clearGroupBudget,fillFromLastMonth,
@@ -1586,7 +1604,7 @@ async function init() {
     if(accounts.length===0){
       const def=state.accounts[0];
       await saveAccount(def);
-      await saveUserData(def.id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),profile:{name:def.name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
+      await saveUserData(def.id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),groupColors:{},budgetMode:{},profile:{name:def.name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
     } else {state.accounts=accounts;}
     cacheAccounts();
   } catch(e){console.warn('Firestore 초기화 실패:',e);}
