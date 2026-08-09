@@ -70,7 +70,7 @@ const state = {
   profile:{name:'',age:'',photo:null},
   goal:{name:'목표 설정',target:'0'},
   txs:[], assets:[], budgets:{},
-  groups:GROUPS.slice(), cats:DEF_CATS.slice(), openGroups:{}, groupColors:{},
+  groups:GROUPS.slice(), cats:DEF_CATS.slice(), openGroups:{}, groupColors:{}, budgetMode:{},
   authId:null,
   accounts:[{id:'test1',name:'테스트',phone:'',pw:hashFn('1234'),qs:[{q:QPOOL[0],a:hashFn('test')}],createdAt:todayStr()}],
   drafts:[], signupQs:[], findMode:'id', findQIdx:0,
@@ -95,7 +95,7 @@ function debtTotal()      { return state.assets.filter(a=>a.type==='대출').red
 function netWorth()       { return assetTotal()-debtTotal(); }
 function budgetFor(key)   { return state.budgets[key]||{}; }
 function monthTxs(keys)   { return state.txs.filter(t=>keys.includes(t.date.replace(/-/g,'').slice(0,6))).sort((a,b)=>a.date<b.date?1:-1); }
-function snapshotData()   { return {txs:state.txs.slice(),assets:state.assets.slice(),budgets:{...state.budgets},cats:state.cats.slice(),groups:state.groups.slice(),groupColors:{...state.groupColors},profile:{...state.profile},goal:{...state.goal}}; }
+function snapshotData()   { return {txs:state.txs.slice(),assets:state.assets.slice(),budgets:{...state.budgets},cats:state.cats.slice(),groups:state.groups.slice(),groupColors:{...state.groupColors},budgetMode:{...state.budgetMode},profile:{...state.profile},goal:{...state.goal}}; }
 
 // ── SESSION CACHE ──
 function cacheAccounts()       { try{sessionStorage.setItem('gb_accounts',JSON.stringify(state.accounts));}catch(e){} }
@@ -136,11 +136,12 @@ function applyUserData(d,id) {
     state.cats=(d.cats||DEF_CATS).slice();
     state.groups=(d.groups||GROUPS).slice();
     state.groupColors={...(d.groupColors||{})};
+    state.budgetMode={...(d.budgetMode||{})};
     state.profile={...(d.profile||{name:id,age:'',photo:null})};
     state.goal={...(d.goal||{name:'목표 설정',target:'0'})};
   } else {
     state.txs=[];state.assets=[];state.budgets={};
-    state.cats=DEF_CATS.slice();state.groups=GROUPS.slice();state.groupColors={};
+    state.cats=DEF_CATS.slice();state.groups=GROUPS.slice();state.groupColors={};state.budgetMode={};
     const acct=state.accounts.find(a=>a.id===id);
     state.profile={name:acct?acct.name:id,age:'',photo:null};
     state.goal={name:'목표 설정',target:'0'};
@@ -536,12 +537,19 @@ function setAssetAmount(id,val) {
 function toggleAssetCheck(id) { state.assets=state.assets.map(a=>a.id===id?{...a,checked:!a.checked}:a); renderAssets();bgSave(); }
 function deleteAsset(id) { if(!confirm('이 자산을 삭제하시겠습니까?'))return; state.assets=state.assets.filter(a=>a.id!==id); bgSave();renderAssets(); }
 
-// ── BUDGET (카테고리 단위) ──
-// 키 형식: 'group::cat'
+// ── BUDGET (대분류/카테고리 이중 모드) ──
+// 모드: 'cat'(기본, 카테고리별) | 'group'(대분류 단일 예산)
+function getBudgetMode(group) { return state.budgetMode[group]||'cat'; }
+function setBudgetMode(group,mode) {
+  state.budgetMode[group]=mode;
+  bgSave(); renderBudgetInput();
+}
+// 카테고리 단위 키: 'group::cat'
 function catBudgetKey(group,cat) { return group+'::'+cat; }
 function catBudget(group,cat) { return num((budgetFor(monthKey())[catBudgetKey(group,cat)])||0); }
 function groupBudgetTotal(group) {
   const bud=budgetFor(monthKey());
+  if(getBudgetMode(group)==='group') return num(bud[group]||0);
   return state.cats.filter(c=>c.group===group).reduce((s,c)=>s+num(bud[catBudgetKey(group,c.name)]||0),0);
 }
 function catActual(keys,group,cat) {
@@ -550,7 +558,7 @@ function catActual(keys,group,cat) {
 function setBudget(group,cat,val) {
   const mk=monthKey();
   if(!state.budgets[mk]) state.budgets[mk]={};
-  const key=catBudgetKey(group,cat);
+  const key=getBudgetMode(group)==='group'?group:catBudgetKey(group,cat);
   const n=Number(String(val).replace(/[^0-9]/g,''))||0;
   if(n) state.budgets[mk][key]=n; else delete state.budgets[mk][key];
   bgSave();
@@ -981,20 +989,34 @@ function renderBudgetInput() {
     ${budGroups.map(g=>{
       const col=gc(g);
       const cats=state.cats.filter(c=>c.group===g);
+      const mode=getBudgetMode(g);
       const gBud=groupBudgetTotal(g),gAct=groupSum(keys,g);
       const gr=gBud?Math.min(150,gAct/gBud*100):0;
       const grc=gr>100?'var(--red)':gr>80?'var(--amber)':col.c;
-      return`<div style="border:1.5px solid ${col.c};border-radius:14px;overflow:hidden;margin-bottom:10px">
-        <div style="background:${col.bg};padding:11px 14px;display:flex;align-items:center;gap:8px;border-bottom:1px solid ${col.c}33">
-          <span style="font-size:13px;font-weight:700;color:${col.fg}">${g}</span>
-          <span style="flex:1"></span>
-          ${gBud?`<span style="font-size:11px;color:${grc};font-weight:600">${pct(gr)}</span>
-                  <span style="font-size:10px;color:var(--faint);margin:0 2px">${won(gAct)}/${won(gBud)}</span>
-                  <span onclick="clearGroupBudget('${g}')" title="예산 전체 삭제"
-                        style="font-size:16px;color:${col.c};opacity:.5;cursor:pointer;padding:0 4px;line-height:1">×</span>`
-                :`<span style="font-size:10.5px;color:var(--faint)">실적 ${won(gAct)}</span>`}
-        </div>
-        <div style="background:var(--card)">
+      // 모드 토글 버튼 스타일 헬퍼
+      const modeBtn=(label,m)=>`<span onclick="setBudgetMode('${g}','${m}')"
+        style="padding:3px 10px;border-radius:20px;font-size:11px;cursor:pointer;font-weight:600;
+               background:${mode===m?col.c:'transparent'};color:${mode===m?'#fff':col.fg};
+               border:1.5px solid ${col.c};transition:background .15s">${label}</span>`;
+      // 대분류 모드: 단일 입력
+      const groupModeBody=`<div style="background:var(--card);padding:13px 14px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:13px;color:var(--ink);flex:1">총 예산</span>
+            <span style="font-size:10.5px;color:var(--faint)">${won(gAct)}</span>
+            <input class="inp-sm" inputmode="numeric" style="width:110px;text-align:right;height:32px;font-size:12px"
+                   value="${gBud||''}" placeholder="예산 입력"
+                   onchange="setBudgetAndRefresh('${g}','__group__',this.value)">
+          </div>
+          ${gBud?`<div class="bar-row" style="margin-top:8px;height:5px">
+                    <div style="background:${grc};width:${Math.min(100,gr)}%;height:5px;border-radius:3px;transition:width .3s"></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--faint);margin-top:4px">
+                    <span style="color:${grc};font-weight:600">${pct(gr)}</span>
+                    <span>${won(Math.max(0,gBud-gAct))} 남음</span>
+                  </div>`:''}
+        </div>`;
+      // 카테고리 모드: 항목별 입력
+      const catModeBody=`<div style="background:var(--card)">
           ${cats.length?cats.map(c=>{
             const cb=catBudget(g,c.name),ca=catActual(keys,g,c.name);
             const cr=cb?Math.min(150,ca/cb*100):0;
@@ -1016,7 +1038,20 @@ function renderBudgetInput() {
                     </div>`:''}
             </div>`;
           }).join(''):`<div style="padding:18px 14px;font-size:11.5px;color:var(--faint);text-align:center">카테고리를 먼저 추가해주세요.</div>`}
+        </div>`;
+      return`<div style="border:1.5px solid ${col.c};border-radius:14px;overflow:hidden;margin-bottom:10px">
+        <div style="background:${col.bg};padding:11px 14px;border-bottom:1px solid ${col.c}33">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+            <span style="font-size:13px;font-weight:700;color:${col.fg};flex:1">${g}</span>
+            ${gBud?`<span style="font-size:11px;color:${grc};font-weight:600">${pct(gr)}</span>
+                    <span style="font-size:10px;color:var(--faint);margin:0 2px">${won(gAct)}/${won(gBud)}</span>
+                    <span onclick="clearGroupBudget('${g}')" title="예산 삭제"
+                          style="font-size:15px;color:${col.c};opacity:.5;cursor:pointer;padding:0 4px;line-height:1">×</span>`
+                  :`<span style="font-size:10.5px;color:var(--faint)">실적 ${won(gAct)}</span>`}
+          </div>
+          <div style="display:flex;gap:5px">${modeBtn('대분류 기준','group')}${modeBtn('카테고리 기준','cat')}</div>
         </div>
+        ${mode==='group'?groupModeBody:catModeBody}
       </div>`;
     }).join('')}
     <button onclick="fillFromLastMonth()" class="btn-outline" style="height:44px;font-size:13px;margin-bottom:4px">
@@ -1024,12 +1059,24 @@ function renderBudgetInput() {
     </button>`;
 }
 
-function setBudgetAndRefresh(group,cat,val) { setBudget(group,cat,val); renderBudgetInput(); }
+function setBudgetAndRefresh(group,cat,val) {
+  // cat==='__group__'은 대분류 모드 단일 예산
+  const mk=monthKey();
+  if(!state.budgets[mk]) state.budgets[mk]={};
+  const key=cat==='__group__'?group:catBudgetKey(group,cat);
+  const n=Number(String(val).replace(/[^0-9]/g,''))||0;
+  if(n) state.budgets[mk][key]=n; else delete state.budgets[mk][key];
+  bgSave(); renderBudgetInput();
+}
 
 function clearGroupBudget(group) {
   const mk=monthKey();
   if(!state.budgets[mk]) return;
-  state.cats.filter(c=>c.group===group).forEach(c=>{ delete state.budgets[mk][catBudgetKey(group,c.name)]; });
+  if(getBudgetMode(group)==='group') {
+    delete state.budgets[mk][group];
+  } else {
+    state.cats.filter(c=>c.group===group).forEach(c=>{ delete state.budgets[mk][catBudgetKey(group,c.name)]; });
+  }
   bgSave(); renderBudgetInput();
 }
 
@@ -1038,10 +1085,15 @@ function fillFromLastMonth() {
   const mk=monthKey();
   if(!state.budgets[mk]) state.budgets[mk]={};
   state.groups.filter(g=>g!=='수입').forEach(g=>{
-    state.cats.filter(c=>c.group===g).forEach(c=>{
-      const actual=state.txs.filter(t=>t.date.replace(/-/g,'').slice(0,6)===prevK&&t.group===g&&t.cat===c.name).reduce((s,t)=>s+num(t.amount),0);
-      if(actual>0) state.budgets[mk][catBudgetKey(g,c.name)]=actual;
-    });
+    if(getBudgetMode(g)==='group') {
+      const actual=state.txs.filter(t=>t.date.replace(/-/g,'').slice(0,6)===prevK&&t.group===g).reduce((s,t)=>s+num(t.amount),0);
+      if(actual>0) state.budgets[mk][g]=actual;
+    } else {
+      state.cats.filter(c=>c.group===g).forEach(c=>{
+        const actual=state.txs.filter(t=>t.date.replace(/-/g,'').slice(0,6)===prevK&&t.group===g&&t.cat===c.name).reduce((s,t)=>s+num(t.amount),0);
+        if(actual>0) state.budgets[mk][catBudgetKey(g,c.name)]=actual;
+      });
+    }
   });
   bgSave(); renderBudgetInput(); showToast('전월 실적으로 예산을 채웠습니다.');
 }
@@ -1325,7 +1377,7 @@ Object.assign(window,{
   openBulkImport,closeBulkImport,parseBulk,saveBulk,
   deleteTx,openEditTx,updateEditTx,saveEditTx,closeEditTx,
   addAsset,setAssetAmount,toggleAssetCheck,deleteAsset,renderAssets,
-  setBudget,catBudgetKey,catBudget,groupBudgetTotal,catActual,toggleGroup,render,
+  setBudget,catBudgetKey,catBudget,groupBudgetTotal,catActual,getBudgetMode,setBudgetMode,toggleGroup,render,
   openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload,
   goApp,renderBudgetInput,renderCatManage,
   setBudgetAndRefresh,clearGroupBudget,fillFromLastMonth,
