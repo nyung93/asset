@@ -747,11 +747,14 @@ setInterval(updateClock, 10000);
 //  INIT — Firestore에서 계정 목록 로드
 // ─────────────────────────────────────────
 async function init() {
-  setLoading(true);
+  // 랜딩 화면 즉시 렌더 — Firestore를 기다리지 않음
+  state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
+  render();
+
+  // 계정 목록은 백그라운드에서 로드
   try {
     const accounts = await fetchAccounts();
     if (accounts.length === 0) {
-      // 최초 실행: 기본 계정 Firestore에 저장
       const defaultAcct = state.accounts[0];
       await saveAccount(defaultAcct);
       await saveUserData(defaultAcct.id, {
@@ -764,11 +767,8 @@ async function init() {
       state.accounts = accounts;
     }
   } catch(e) {
-    console.warn('Firestore 초기화 실패 (오프라인?)', e);
+    console.warn('Firestore 초기화 실패:', e);
   }
-  setLoading(false);
-  state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
-  render();
 }
 
 init();
