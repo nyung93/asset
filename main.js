@@ -74,7 +74,9 @@ const state = {
   findMode: 'id',
   findQIdx: 0,
   newAssetType: '현금',
-  seq: 100
+  seq: 100,
+  editingTx: null,
+  editingTxData: null
 };
 
 function nid() { return ++state.seq; }
@@ -108,7 +110,7 @@ function debtTotal()      { return state.assets.filter(a => a.type === '대출')
 function netWorth()       { return assetTotal() - debtTotal(); }
 function budgetFor(key)   { return state.budgets[key] || {}; }
 function monthTxs(keys)   { return state.txs.filter(t => keys.includes(t.date.replace(/-/g,'').slice(0,6))).sort((a,b) => a.date < b.date ? 1 : -1); }
-function snapshotData()   {
+function snapshotData() {
   return {
     txs:     state.txs.slice(),
     assets:  state.assets.slice(),
@@ -118,6 +120,47 @@ function snapshotData()   {
     profile: { ...state.profile },
     goal:    { ...state.goal }
   };
+}
+
+// ── sessionStorage 캐시 ──
+function cacheAccounts() {
+  try { sessionStorage.setItem('gb_accounts', JSON.stringify(state.accounts)); } catch(e) {}
+}
+function cacheUserData(id, data) {
+  try { sessionStorage.setItem('gb_ud_'+id, JSON.stringify(data)); } catch(e) {}
+}
+function getCachedAccounts() {
+  try { const s = sessionStorage.getItem('gb_accounts'); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+}
+function getCachedUserData(id) {
+  try { const s = sessionStorage.getItem('gb_ud_'+id); return s ? JSON.parse(s) : null; } catch(e) { return null; }
+}
+
+// ── 백그라운드 저장 (UI 블로킹 없음) ──
+function bgSave() {
+  if (!state.authId) return;
+  const data = snapshotData();
+  cacheUserData(state.authId, data);
+  saveUserData(state.authId, data).catch(console.error);
+}
+
+// ── 사용자 데이터 적용 ──
+function applyUserData(d, id) {
+  if (d) {
+    state.txs     = JSON.parse(JSON.stringify(d.txs || []));
+    state.assets  = JSON.parse(JSON.stringify(d.assets || []));
+    state.budgets = JSON.parse(JSON.stringify(d.budgets || {}));
+    state.cats    = (d.cats || DEF_CATS).slice();
+    state.groups  = (d.groups || GROUPS).slice();
+    state.profile = { ...(d.profile || { name:id, age:'' }) };
+    state.goal    = { ...(d.goal || { name:'목표 설정', target:'0' }) };
+  } else {
+    state.txs = []; state.assets = []; state.budgets = {};
+    state.cats = DEF_CATS.slice(); state.groups = GROUPS.slice();
+    const acct = state.accounts.find(a => a.id === id);
+    state.profile = { name: acct ? acct.name : id, age:'' };
+    state.goal    = { name:'목표 설정', target:'0' };
+  }
 }
 
 // ─────────────────────────────────────────
@@ -138,11 +181,12 @@ function switchTab(tab) {
   document.getElementById('scroll-area').scrollTop = 0;
 }
 
-async function logout() {
-  if (state.authId) {
-    setLoading(true);
-    try { await saveUserData(state.authId, snapshotData()); } catch(e) { console.error('로그아웃 저장 실패:', e); }
-    setLoading(false);
+function logout() {
+  const id = state.authId;
+  if (id) {
+    const data = snapshotData();
+    cacheUserData(id, data);
+    saveUserData(id, data).catch(console.error);
   }
   state.screen = 'landing'; state.authId = null; state.tab = 'dash';
   render();
@@ -162,30 +206,24 @@ async function doLogin() {
 }
 
 async function loadAccount(id) {
-  setLoading(true);
-  let d = null;
-  try { d = await fetchUserData(id); } catch(e) { console.error('데이터 로드 실패:', e); }
-  setLoading(false);
-  if (d) {
-    state.txs     = JSON.parse(JSON.stringify(d.txs || []));
-    state.assets  = JSON.parse(JSON.stringify(d.assets || []));
-    state.budgets = JSON.parse(JSON.stringify(d.budgets || {}));
-    state.cats    = (d.cats || DEF_CATS).slice();
-    state.groups  = (d.groups || GROUPS).slice();
-    state.profile = { ...(d.profile || { name:id, age:'' }) };
-    state.goal    = { ...(d.goal || { name:'목표 설정', target:'0' }) };
+  const cached = getCachedUserData(id);
+  if (cached) {
+    applyUserData(cached, id);
+    state.authId = id; state.screen = 'app'; state.tab = 'dash';
+    state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
+    render();
+    fetchUserData(id).then(d => { if (d) cacheUserData(id, d); }).catch(console.error);
   } else {
-    state.txs = []; state.assets = []; state.budgets = {};
-    state.cats = DEF_CATS.slice(); state.groups = GROUPS.slice();
-    const acct = state.accounts.find(a => a.id === id);
-    state.profile = { name: acct ? acct.name : id, age:'' };
-    state.goal    = { name:'목표 설정', target:'0' };
+    setLoading(true);
+    let d = null;
+    try { d = await fetchUserData(id); } catch(e) { console.error('데이터 로드 실패:', e); }
+    setLoading(false);
+    applyUserData(d, id);
+    if (d) cacheUserData(id, d);
+    state.authId = id; state.screen = 'app'; state.tab = 'dash';
+    state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
+    render();
   }
-  state.authId = id;
-  state.screen = 'app';
-  state.tab    = 'dash';
-  state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
-  render();
 }
 
 async function doSignup() {
@@ -201,13 +239,14 @@ async function doSignup() {
   if (pw !== pw2)        { showNotice('signup-notice','비밀번호 확인이 일치하지 않습니다.',false); return; }
   if (phone.length < 10) { showNotice('signup-notice','휴대폰 번호를 정확히 입력하세요.',false); return; }
   const qs = state.signupQs.map((q,i) => ({ q, a:(document.getElementById('su-q'+i)||{value:''}).value.trim() }));
-  if (qs.some(x => !x.a)) { showNotice('signup-notice','비밀번호 찾기 질문 3개에 모두 답해주세요.',false); return; }
+  if (qs.some(x => !x.a)) { showNotice('signup-notice','비밀번호 찾기 질문에 답해주세요.',false); return; }
   const acct = { id, name, phone, pw:hashFn(pw), qs:qs.map(x => ({q:x.q, a:hashFn(x.a)})), createdAt:todayStr() };
   setLoading(true);
   try {
     await saveAccount(acct);
     await saveUserData(id, { txs:[], assets:[], budgets:{}, cats:DEF_CATS.slice(), groups:GROUPS.slice(), profile:{name,age:''}, goal:{name:'목표 설정',target:'0'} });
     state.accounts.push(acct);
+    cacheAccounts();
   } catch(e) {
     setLoading(false);
     showNotice('signup-notice','서버 오류가 발생했습니다. 다시 시도해 주세요.',false);
@@ -281,11 +320,23 @@ async function doFind() {
     if (q.a !== hashFn(ans)) { showNotice('find-notice','질문 답이 일치하지 않습니다.',false); return; }
     if (npw.length < 6)      { showNotice('find-notice','새 비밀번호는 6자 이상 입력하세요.',false); return; }
     acct.pw = hashFn(npw);
-    setLoading(true);
-    try { await saveAccount(acct); showNotice('find-notice','비밀번호가 변경되었습니다.',true); }
-    catch(e) { showNotice('find-notice','저장 실패. 다시 시도해 주세요.',false); }
-    setLoading(false);
+    cacheAccounts();
+    saveAccount(acct).catch(console.error);
+    showNotice('find-notice','비밀번호가 변경되었습니다.',true);
   }
+}
+
+// ─────────────────────────────────────────
+//  PROFILE & GOAL SAVE
+// ─────────────────────────────────────────
+function saveProfile(field, val) {
+  state.profile[field] = val;
+  bgSave();
+}
+function saveGoal(field, val) {
+  if (field === 'target') val = String(val).replace(/[^0-9]/g, '');
+  state.goal[field] = val;
+  bgSave();
 }
 
 // ─────────────────────────────────────────
@@ -313,10 +364,10 @@ function renderAdmin() {
 }
 async function removeAccount(id) {
   if (!confirm(id+' 계정을 삭제하시겠습니까?')) return;
-  setLoading(true);
-  try { await deleteAccount(id); } catch(e) { console.error(e); }
   state.accounts = state.accounts.filter(a => a.id !== id);
-  setLoading(false);
+  cacheAccounts();
+  try { sessionStorage.removeItem('gb_ud_'+id); } catch(e) {}
+  deleteAccount(id).catch(console.error);
   renderAdmin();
 }
 
@@ -335,24 +386,103 @@ function setDraftField(id, field, val) {
   state.drafts = state.drafts.map(d => d.id === id ? { ...d, [field]:val } : d);
   renderInput();
 }
-async function saveDrafts() {
+function saveDrafts() {
   const valid = state.drafts.filter(d => d.name.trim() && d.amount);
   if (!valid.length) { showToast('저장할 항목이 없습니다.'); return; }
   valid.forEach(d => state.txs.push({ id:nid(), name:d.name.trim(), date:d.date, group:d.group, cat:d.cat||'미분류', amount:num(d.amount), note:d.note }));
   state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
   renderInput();
-  try {
-    await saveUserData(state.authId, snapshotData());
-    showToast(valid.length+'건 저장되었습니다.');
-  } catch(e) {
-    showToast('저장 실패. 다시 시도해 주세요.');
-  }
+  bgSave();
+  showToast(valid.length+'건 저장되었습니다.');
+}
+
+// ─────────────────────────────────────────
+//  TRANSACTION EDIT / DELETE
+// ─────────────────────────────────────────
+function deleteTx(id) {
+  if (!confirm('이 거래를 삭제하시겠습니까?')) return;
+  state.txs = state.txs.filter(t => t.id !== id);
+  bgSave(); render();
+}
+function openEditTx(id) {
+  const t = state.txs.find(t => t.id === id);
+  if (!t) return;
+  state.editingTx = id;
+  state.editingTxData = { ...t };
+  renderTxModal();
+}
+function updateEditTx(field, val) {
+  if (!state.editingTxData) return;
+  state.editingTxData[field] = val;
+  renderTxModal();
+}
+function saveEditTx() {
+  const idx = state.txs.findIndex(t => t.id === state.editingTx);
+  if (idx === -1) { closeEditTx(); return; }
+  const nameEl   = document.getElementById('etx-name');
+  const amtEl    = document.getElementById('etx-amount');
+  const dateEl   = document.getElementById('etx-date');
+  const noteEl   = document.getElementById('etx-note');
+  const d = state.editingTxData;
+  state.txs[idx] = {
+    ...state.txs[idx],
+    name:   nameEl ? nameEl.value.trim() : d.name,
+    amount: num(amtEl ? amtEl.value : d.amount),
+    date:   dateEl ? dateEl.value : d.date,
+    group:  d.group,
+    cat:    d.cat,
+    note:   noteEl ? noteEl.value : (d.note || '')
+  };
+  state.editingTx = null; state.editingTxData = null;
+  const el = document.getElementById('tx-edit-modal');
+  if (el) el.remove();
+  bgSave(); render();
+}
+function closeEditTx() {
+  state.editingTx = null; state.editingTxData = null;
+  const el = document.getElementById('tx-edit-modal');
+  if (el) el.remove();
+}
+function renderTxModal() {
+  const existing = document.getElementById('tx-edit-modal');
+  if (existing) existing.remove();
+  if (!state.editingTx || !state.editingTxData) return;
+  const d = state.editingTxData;
+  const cats = state.cats.filter(c => c.group === d.group).map(c => c.name);
+  const groupChips = GROUPS.map(g => `<div class="chip${d.group===g?' sel':''}" onclick="updateEditTx('group','${g}')" style="${d.group===g?'background:'+gc(g).bg+';color:'+gc(g).fg+';border-color:'+gc(g).c:''}">${g}</div>`).join('');
+  const catChips   = cats.map(c => `<div class="chip${d.cat===c?' sel':''}" onclick="updateEditTx('cat','${c}')" style="${d.cat===c?'background:'+gc(d.group).bg+';color:'+gc(d.group).fg+';border-color:'+gc(d.group).c:''}">${c}</div>`).join('');
+  const modal = document.createElement('div');
+  modal.id = 'tx-edit-modal';
+  modal.className = 'modal-backdrop';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="modal-title" style="margin-bottom:0">거래 수정</div>
+        <div onclick="closeEditTx()" style="font-size:22px;color:var(--muted);cursor:pointer;line-height:1;padding:0 4px">×</div>
+      </div>
+      <div class="lbl">항목명</div>
+      <input id="etx-name" class="inp-sm" style="width:100%" value="${d.name.replace(/"/g,'&quot;')}">
+      <div style="display:flex;gap:9px;margin-top:11px">
+        <div style="flex:1"><div class="lbl">날짜</div><input type="date" id="etx-date" class="inp-sm" style="width:100%" value="${d.date}"></div>
+        <div style="flex:1"><div class="lbl">금액</div><input id="etx-amount" class="inp-sm" style="width:100%;text-align:right" inputmode="numeric" value="${d.amount}"></div>
+      </div>
+      <div class="lbl" style="margin-top:11px">구분</div>
+      <div class="chip-group">${groupChips}</div>
+      ${cats.length ? `<div class="lbl" style="margin-top:11px">카테고리</div><div class="chip-group">${catChips}</div>` : ''}
+      <div class="lbl" style="margin-top:11px">비고</div>
+      <input id="etx-note" class="inp-sm" style="width:100%" value="${(d.note||'').replace(/"/g,'&quot;')}">
+      <div style="display:flex;gap:9px;margin-top:18px">
+        <button onclick="closeEditTx()" class="btn-outline" style="height:44px;font-size:13px;flex:1">취소</button>
+        <button onclick="saveEditTx()" class="btn-blue" style="height:44px;font-size:13px;flex:2">저장</button>
+      </div>
+    </div>`;
+  document.getElementById('app').appendChild(modal);
 }
 
 // ─────────────────────────────────────────
 //  ASSETS
 // ─────────────────────────────────────────
-async function addAsset() {
+function addAsset() {
   const name   = document.getElementById('new-asset-name').value.trim();
   const amount = num(document.getElementById('new-asset-amount').value);
   if (!name) { showToast('자산 이름을 입력하세요.'); return; }
@@ -360,20 +490,34 @@ async function addAsset() {
   document.getElementById('new-asset-name').value   = '';
   document.getElementById('new-asset-amount').value = '';
   renderAssets();
-  try { await saveUserData(state.authId, snapshotData()); }
-  catch(e) { showToast('저장 실패.'); }
+  bgSave();
 }
 let _assetSaveTimer;
 function setAssetAmount(id, val) {
   state.assets = state.assets.map(a => a.id === id ? { ...a, amount:num(val) } : a);
   renderAssetSummary();
   clearTimeout(_assetSaveTimer);
-  _assetSaveTimer = setTimeout(() => saveUserData(state.authId, snapshotData()).catch(console.error), 800);
+  _assetSaveTimer = setTimeout(bgSave, 800);
 }
-async function toggleAssetCheck(id) {
+function toggleAssetCheck(id) {
   state.assets = state.assets.map(a => a.id === id ? { ...a, checked:!a.checked } : a);
   renderAssets();
-  try { await saveUserData(state.authId, snapshotData()); } catch(e) {}
+  bgSave();
+}
+function deleteAsset(id) {
+  if (!confirm('이 자산을 삭제하시겠습니까?')) return;
+  state.assets = state.assets.filter(a => a.id !== id);
+  bgSave(); renderAssets();
+}
+
+// ─────────────────────────────────────────
+//  BUDGET
+// ─────────────────────────────────────────
+function setBudget(group, val) {
+  const mk = monthKey();
+  if (!state.budgets[mk]) state.budgets[mk] = {};
+  state.budgets[mk][group] = Number(String(val).replace(/[^0-9]/g,'')) || 0;
+  bgSave();
 }
 
 // ─────────────────────────────────────────
@@ -443,6 +587,8 @@ function render() {
     else if (state.tab === 'input')  renderInput();
     else if (state.tab === 'assets') renderAssets();
     else if (state.tab === 'mypage') renderMypage();
+    // 수정 모달 유지
+    if (state.editingTx) renderTxModal();
   }
 }
 
@@ -576,20 +722,27 @@ function renderLedger() {
     </div>`;
   }).join('');
 
-  const bud = budgetFor(monthKey()), budKeys = Object.keys(bud);
-  document.getElementById('l-budget').innerHTML = budKeys.length ? budKeys.map(g => {
-    const b = num(bud[g]), a = groupSum(keys,g), r = b ? a/b*100 : 0;
+  // ── 예산 설정 (항상 지출 그룹 표시 + 입력 가능) ──
+  const bud = budgetFor(monthKey());
+  document.getElementById('l-budget').innerHTML = spendGroups().map(g => {
+    const b = num(bud[g] || 0), a = groupSum(keys, g);
+    const r = b ? a/b*100 : 0;
     const rc = r > 100 ? 'var(--red)' : r > 80 ? 'var(--amber)' : 'var(--green)';
     return `<div class="budget-row">
-      <div style="display:flex;align-items:baseline;gap:8px">
-        <span style="font-size:12.5px;color:var(--ink);flex:1">${g}</span>
-        <span style="font-size:12.5px;font-weight:600;color:${rc}">${b?pct(r):'예산 미설정'}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge" style="background:${gc(g).bg};color:${gc(g).fg};flex:none">${g}</span>
+        <span style="flex:1"></span>
+        <input class="inp-sm" inputmode="numeric" style="width:110px;text-align:right;height:34px;font-size:12px"
+               value="${b || ''}" placeholder="예산 입력"
+               onchange="setBudget('${g}',this.value)">
       </div>
-      <div class="bar-row" style="margin-top:7px"><div class="bar-fill" style="background:${rc};width:${Math.min(100,r)}%"></div></div>
-      <div style="font-size:10.5px;color:var(--faint);margin-top:5px">${won(a)} / 예산 ${won(b)}</div>
+      ${b ? `<div class="bar-row" style="margin-top:8px"><div class="bar-fill" style="background:${rc};width:${Math.min(100,r)}%"></div></div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:5px">${won(a)} / 예산 ${won(b)} · <span style="color:${rc};font-weight:600">${pct(r)}</span></div>` :
+      `<div style="font-size:10.5px;color:var(--faint);margin-top:5px">이번 달 지출 ${won(a)} · 예산을 입력하면 진행률이 표시됩니다.</div>`}
     </div>`;
-  }).join('') : '<div style="padding:14px;font-size:12px;color:var(--faint)">예산이 설정되지 않았습니다.</div>';
+  }).join('');
 
+  // ── 거래 목록 (수정·삭제 버튼 포함) ──
   const txs = monthTxs(keys);
   document.getElementById('l-tx-title').textContent = '원자료 '+txs.length+'건';
   document.getElementById('l-tx-list').innerHTML = txs.length ? txs.map(t => `
@@ -597,7 +750,14 @@ function renderLedger() {
       <div style="font-size:10.5px;color:var(--faint);flex:none;width:34px;line-height:1.6">${t.date.slice(5)}</div>
       <div style="flex:1;min-width:0">
         <div class="tx-top"><span class="tx-name">${t.name}</span><span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span></div>
-        <div class="tx-meta"><span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span><span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span></div>
+        <div class="tx-meta">
+          <span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span>
+          <span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span>
+          <span style="flex:1"></span>
+          <span onclick="openEditTx(${t.id})" style="font-size:11px;color:var(--blue);cursor:pointer;font-weight:600;padding:2px 4px">수정</span>
+          <span style="font-size:11px;color:var(--line);margin:0 2px">|</span>
+          <span onclick="deleteTx(${t.id})" style="font-size:11px;color:var(--red);cursor:pointer;font-weight:600;padding:2px 4px">삭제</span>
+        </div>
       </div>
     </div>`).join('') :
     '<div style="padding:22px;text-align:center;font-size:12px;color:var(--faint)">이 달의 원자료가 없습니다.<br><span style="color:var(--blue);cursor:pointer" onclick="switchTab(\'input\')">입력하러 가기</span></div>';
@@ -664,7 +824,8 @@ function renderAssets() {
           <div style="font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</div>
           <div style="font-size:10.5px;color:var(--faint);margin-top:2px">${assetTotal()?'전체의 '+pct(num(a.amount)/assetTotal()*100):'—'}</div>
         </div>
-        <input class="inp-sm" inputmode="numeric" style="width:106px;text-align:right" value="${a.amount}" onchange="setAssetAmount(${a.id},this.value)">
+        <input class="inp-sm" inputmode="numeric" style="width:90px;text-align:right" value="${a.amount}" onchange="setAssetAmount(${a.id},this.value)">
+        <div onclick="deleteAsset(${a.id})" style="width:28px;height:28px;border-radius:var(--r-sm);background:var(--red-tint);color:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;font-weight:400;flex:none;line-height:1">×</div>
       </div>`).join('')}
     </div>`;
   }).join('');
@@ -726,9 +887,11 @@ function renderMypage() {
 Object.assign(window, {
   state, go, switchTab, logout, loadAccount, removeAccount,
   doLogin, doSignup, shuffleQs, setFindMode, rotateQ, doFind,
+  saveProfile, saveGoal,
   addDraft, removeDraft, setDraftField, saveDrafts,
-  addAsset, setAssetAmount, toggleAssetCheck, renderAssets,
-  toggleGroup, render
+  deleteTx, openEditTx, updateEditTx, saveEditTx, closeEditTx,
+  addAsset, setAssetAmount, toggleAssetCheck, deleteAsset, renderAssets,
+  setBudget, toggleGroup, render
 });
 
 // ─────────────────────────────────────────
@@ -747,11 +910,12 @@ setInterval(updateClock, 10000);
 //  INIT — Firestore에서 계정 목록 로드
 // ─────────────────────────────────────────
 async function init() {
-  // 랜딩 화면 즉시 렌더 — Firestore를 기다리지 않음
+  const cachedAccounts = getCachedAccounts();
+  if (cachedAccounts) state.accounts = cachedAccounts;
+
   state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
   render();
 
-  // 계정 목록은 백그라운드에서 로드
   try {
     const accounts = await fetchAccounts();
     if (accounts.length === 0) {
@@ -766,6 +930,7 @@ async function init() {
     } else {
       state.accounts = accounts;
     }
+    cacheAccounts();
   } catch(e) {
     console.warn('Firestore 초기화 실패:', e);
   }

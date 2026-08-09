@@ -126,7 +126,6 @@
           <div id="find-q-box" style="background:var(--card);border:1px solid var(--line);border-radius:var(--r-md);padding:12px 13px">
             <div style="display:flex;align-items:center;gap:8px">
               <span id="find-q-text" style="font-size:12px;font-weight:600;color:var(--ink);flex:1"></span>
-              <span onclick="rotateQ()" style="font-size:10.5px;font-weight:600;color:var(--blue);cursor:pointer;flex:none">다른 질문</span>
             </div>
             <input id="f-ans" class="inp-sm" placeholder="답변 입력" style="width:100%;margin-top:9px">
           </div>
@@ -289,11 +288,11 @@
               </div>
               <div class="my-field-row">
                 <span class="my-field-lbl">이름</span>
-                <input id="my-name" class="inp-sm" style="flex:1" onchange="state.profile.name=this.value">
+                <input id="my-name" class="inp-sm" style="flex:1" onchange="saveProfile('name', this.value)">
               </div>
               <div class="my-field-row">
                 <span class="my-field-lbl">나이</span>
-                <input id="my-age" class="inp-sm" inputmode="numeric" style="width:64px" onchange="state.profile.age=this.value">
+                <input id="my-age" class="inp-sm" inputmode="numeric" style="width:64px" onchange="saveProfile('age', this.value)">
                 <span style="font-size:11.5px;color:var(--faint)">세</span>
               </div>
             </div>
@@ -313,8 +312,8 @@
           <div class="section-title" style="margin-bottom:9px">재무 목표</div>
           <div class="goal-card">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-              <input id="goal-name" class="inp-sm" style="flex:1" placeholder="목표 이름" onchange="state.goal.name=this.value">
-              <input id="goal-target" class="inp-sm" style="width:110px;text-align:right" placeholder="목표 금액" inputmode="numeric" onchange="state.goal.target=this.value.replace(/[^0-9]/g,'')">
+              <input id="goal-name" class="inp-sm" style="flex:1" placeholder="목표 이름" onchange="saveGoal('name', this.value)">
+              <input id="goal-target" class="inp-sm" style="width:110px;text-align:right" placeholder="목표 금액" inputmode="numeric" onchange="saveGoal('target', this.value)">
               <span style="font-size:12px;color:var(--faint)">원</span>
             </div>
             <div id="goal-bar-wrap" class="bar-row"><div id="goal-bar" class="bar-fill" style="background:var(--blue)"></div></div>
