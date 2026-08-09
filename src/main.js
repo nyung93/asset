@@ -36,6 +36,21 @@ const QPOOL = [
 ];
 const INACTIVITY_MS = 30 * 60 * 1000; // 30분 비활동 자동 로그아웃
 
+// 대분류 커스텀 색상 팔레트 10종
+const CUSTOM_PALETTES = [
+  {key:'blue',  label:'파랑',  c:'#1a57d6', bg:'#e4ecfc', fg:'#134aad'},
+  {key:'green', label:'초록',  c:'#12864f', bg:'#e6f5ed', fg:'#0d6b40'},
+  {key:'indigo',label:'남보라',c:'#4b4fc4', bg:'#ecedfb', fg:'#3a3ea8'},
+  {key:'pink',  label:'분홍',  c:'#c24a7a', bg:'#fbecf2', fg:'#a63c66'},
+  {key:'amber', label:'주황',  c:'#b5720d', bg:'#fbf2e3', fg:'#8f5a08'},
+  {key:'teal',  label:'청록',  c:'#0f7d78', bg:'#e5f4f3', fg:'#0c6864'},
+  {key:'red',   label:'빨강',  c:'#d33f3f', bg:'#fdeceb', fg:'#b23333'},
+  {key:'navy',  label:'네이비',c:'#2d4ba0', bg:'#e8ecf8', fg:'#243d85'},
+  {key:'lime',  label:'연두',  c:'#4a8c2a', bg:'#edf6e7', fg:'#3a7020'},
+  {key:'gray',  label:'회색',  c:'#6b7482', bg:'#eceff5', fg:'#555d6a'},
+];
+let _selGroupColor='blue'; // 대분류 추가 시 선택 색상
+
 const hashFn = s => { let h=5381,t=String(s); for(let i=0;i<t.length;i++) h=(((h<<5)+h)^t.charCodeAt(i))>>>0; return 'sha·'+h.toString(36)+t.length.toString(36); };
 const won   = n => '₩'+Math.round(n).toLocaleString('ko-KR');
 const short = n => { const a=Math.abs(n); if(a>=1e8) return (n/1e8).toFixed(a>=1e9?0:1).replace(/\.0$/,'')+'억'; if(a>=1e4) return Math.round(n/1e4).toLocaleString('ko-KR')+'만'; return n.toLocaleString('ko-KR'); };
@@ -43,7 +58,7 @@ const pct   = n => (Math.round(n*10)/10).toFixed(n%1===0?0:1)+'%';
 const num   = v => { const n=parseInt(String(v).replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; };
 const digits    = v => String(v).replace(/[^0-9]/g,'');
 const maskPhone = p => p&&p.length>=10 ? p.slice(0,3)+'-****-'+p.slice(-4) : (p||'—');
-const gc = g => GC[g]||{c:'#9aa3b0',bg:'#eceff5',fg:'#6b7482'};
+const gc = g => { if(state&&state.groupColors&&state.groupColors[g]){const p=CUSTOM_PALETTES.find(p=>p.key===state.groupColors[g]);if(p)return p;} return GC[g]||{c:'#9aa3b0',bg:'#eceff5',fg:'#6b7482'}; };
 const at = t => AT[t]||{c:'#9aa3b0',bg:'#eceff5',fg:'#6b7482'};
 const todayStr = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 
@@ -55,7 +70,7 @@ const state = {
   profile:{name:'',age:'',photo:null},
   goal:{name:'목표 설정',target:'0'},
   txs:[], assets:[], budgets:{},
-  groups:GROUPS.slice(), cats:DEF_CATS.slice(), openGroups:{},
+  groups:GROUPS.slice(), cats:DEF_CATS.slice(), openGroups:{}, groupColors:{},
   authId:null,
   accounts:[{id:'test1',name:'테스트',phone:'',pw:hashFn('1234'),qs:[{q:QPOOL[0],a:hashFn('test')}],createdAt:todayStr()}],
   drafts:[], signupQs:[], findMode:'id', findQIdx:0,
@@ -80,7 +95,7 @@ function debtTotal()      { return state.assets.filter(a=>a.type==='대출').red
 function netWorth()       { return assetTotal()-debtTotal(); }
 function budgetFor(key)   { return state.budgets[key]||{}; }
 function monthTxs(keys)   { return state.txs.filter(t=>keys.includes(t.date.replace(/-/g,'').slice(0,6))).sort((a,b)=>a.date<b.date?1:-1); }
-function snapshotData()   { return {txs:state.txs.slice(),assets:state.assets.slice(),budgets:{...state.budgets},cats:state.cats.slice(),groups:state.groups.slice(),profile:{...state.profile},goal:{...state.goal}}; }
+function snapshotData()   { return {txs:state.txs.slice(),assets:state.assets.slice(),budgets:{...state.budgets},cats:state.cats.slice(),groups:state.groups.slice(),groupColors:{...state.groupColors},profile:{...state.profile},goal:{...state.goal}}; }
 
 // ── SESSION CACHE ──
 function cacheAccounts()       { try{sessionStorage.setItem('gb_accounts',JSON.stringify(state.accounts));}catch(e){} }
@@ -120,11 +135,12 @@ function applyUserData(d,id) {
     state.budgets=JSON.parse(JSON.stringify(d.budgets||{}));
     state.cats=(d.cats||DEF_CATS).slice();
     state.groups=(d.groups||GROUPS).slice();
+    state.groupColors={...(d.groupColors||{})};
     state.profile={...(d.profile||{name:id,age:'',photo:null})};
     state.goal={...(d.goal||{name:'목표 설정',target:'0'})};
   } else {
     state.txs=[];state.assets=[];state.budgets={};
-    state.cats=DEF_CATS.slice();state.groups=GROUPS.slice();
+    state.cats=DEF_CATS.slice();state.groups=GROUPS.slice();state.groupColors={};
     const acct=state.accounts.find(a=>a.id===id);
     state.profile={name:acct?acct.name:id,age:'',photo:null};
     state.goal={name:'목표 설정',target:'0'};
@@ -894,24 +910,29 @@ function renderCatManage() {
     ${state.groups.map(g=>{
       const cats=state.cats.filter(c=>c.group===g);
       const amt=groupSum(keys,g);
+      const col=gc(g);
+      const gId=g.replace(/[^a-zA-Z0-9가-힣]/g,'-');
       return`<div class="card" style="padding:14px 15px;margin-bottom:10px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:11px">
-          <span class="badge" style="background:${gc(g).bg};color:${gc(g).fg}">${g}</span>
+          <span class="badge" style="background:${col.bg};color:${col.fg}">${g}</span>
           <span style="font-size:11px;color:var(--faint)">${cats.length}개</span>
           <span style="flex:1"></span>
           <span style="font-size:13px;font-weight:600;color:var(--ink)">${won(amt)}</span>
+          <span onclick="removeGroup(this)" data-group="${g.replace(/"/g,'&quot;')}"
+                style="font-size:16px;line-height:1;cursor:pointer;color:var(--muted);padding:4px 6px;border-radius:6px;margin-left:2px"
+                title="대분류 삭제">🗑</span>
         </div>
         <div class="chip-group" style="margin-bottom:10px">
-          ${cats.map(c=>`<div class="chip" style="background:${gc(g).bg};color:${gc(g).fg};border-color:${gc(g).c};display:flex;align-items:center;gap:3px;padding-right:4px">
+          ${cats.map(c=>`<div class="chip" style="background:${col.bg};color:${col.fg};border-color:${col.c};display:flex;align-items:center;gap:3px;padding-right:4px">
             <span onclick="openEditCat('${g}','${c.name}')" style="cursor:pointer">${c.name}</span>
             <span onclick="openEditCat('${g}','${c.name}')" style="font-size:10px;cursor:pointer;opacity:.55;margin-left:1px">✏</span>
             <span onclick="removeCat('${g}','${c.name}')" style="font-size:14px;line-height:1;cursor:pointer;opacity:.55;margin-left:2px">×</span>
           </div>`).join('')}
         </div>
         <div style="display:flex;gap:7px">
-          <input id="nc-${g.replace(/\//g,'-')}" class="inp-sm" style="flex:1" placeholder="새 카테고리"
+          <input id="nc-${gId}" class="inp-sm" style="flex:1" placeholder="새 카테고리"
                  onkeydown="if(event.key==='Enter')addCat('${g}',this.value)">
-          <button onclick="addCat('${g}',document.getElementById('nc-${g.replace(/\//g,'-')}').value)"
+          <button onclick="addCat('${g}',document.getElementById('nc-${gId}').value)"
                   class="btn-outline" style="height:36px;font-size:12px;width:52px;padding:0">추가</button>
         </div>
       </div>`;
@@ -919,6 +940,15 @@ function renderCatManage() {
     <div class="card" style="padding:14px 15px;border:1.5px dashed var(--line);background:var(--bg)">
       <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:3px">대분류 추가</div>
       <div style="font-size:11px;color:var(--faint);margin-bottom:11px">대분류는 월별가계부의 합계 열이 됩니다.</div>
+      <div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:8px">색상 선택</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:13px">
+        ${CUSTOM_PALETTES.map(p=>`
+          <div id="ngc-${p.key}" onclick="selectNewGroupColor('${p.key}')" title="${p.label}"
+               style="width:28px;height:28px;border-radius:50%;background:${p.c};cursor:pointer;
+                      outline:3px solid ${_selGroupColor===p.key?p.c:'transparent'};outline-offset:2px;
+                      transition:outline .15s;box-sizing:border-box"></div>
+        `).join('')}
+      </div>
       <div style="display:flex;gap:7px">
         <input id="new-group-inp" class="inp-sm" style="flex:1" placeholder="예: 경조사"
                onkeydown="if(event.key==='Enter')addGroup(this.value)">
@@ -976,11 +1006,40 @@ function renameCat(group,oldName,newName) {
   state.txs=state.txs.map(t=>t.group===group&&t.cat===oldName?{...t,cat:newName}:t);
   closeCatEditModal(); bgSave(); renderCatManage();
 }
+function selectNewGroupColor(key) {
+  _selGroupColor=key;
+  CUSTOM_PALETTES.forEach(p=>{
+    const el=document.getElementById('ngc-'+p.key);
+    if(el) el.style.outline=`3px solid ${p.key===key?p.c:'transparent'}`;
+  });
+}
 function addGroup(name) {
   name=(name||'').trim();
   if(!name){showToast('대분류 이름을 입력하세요.');return;}
   if(state.groups.includes(name)){showToast('이미 존재하는 대분류입니다.');return;}
-  state.groups.push(name); bgSave(); renderCatManage();
+  state.groupColors[name]=_selGroupColor;
+  state.groups.push(name);
+  _selGroupColor='blue';
+  bgSave(); renderCatManage();
+}
+function removeGroup(elOrName) {
+  const name=typeof elOrName==='string'?elOrName:elOrName.dataset.group;
+  if(!name) return;
+  const txCount=state.txs.filter(t=>t.group===name).length;
+  const catCount=state.cats.filter(c=>c.group===name).length;
+  if(txCount>0) {
+    const catMsg=catCount>0?`\n카테고리 ${catCount}개도 함께 삭제됩니다.`:'';
+    if(!confirm(`'${name}' 대분류는 ${txCount}건의 거래에 사용 중입니다.\n삭제 시 해당 거래의 대분류가 '기타'로 변경됩니다.${catMsg}\n계속하시겠습니까?`))return;
+    if(!state.groups.includes('기타')) state.groups.push('기타');
+    state.txs=state.txs.map(t=>t.group===name?{...t,group:'기타',cat:'미분류'}:t);
+  } else {
+    const catMsg=catCount>0?`\n카테고리 ${catCount}개도 함께 삭제됩니다.`:'';
+    if(!confirm(`'${name}' 대분류를 삭제하시겠습니까?${catMsg}`))return;
+  }
+  state.groups=state.groups.filter(g=>g!==name);
+  state.cats=state.cats.filter(c=>c.group!==name);
+  delete state.groupColors[name];
+  bgSave(); renderCatManage();
 }
 
 // ── RESET ──
@@ -1118,7 +1177,7 @@ Object.assign(window,{
   openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload,
   goApp,renderBudgetInput,renderCatManage,
   setBudgetAndRefresh,clearGroupBudget,fillFromLastMonth,
-  addCat,removeCat,openEditCat,closeCatEditModal,renameCat,addGroup,
+  addCat,removeCat,openEditCat,closeCatEditModal,renameCat,addGroup,removeGroup,selectNewGroupColor,
   resetLedger,resetAssets,resetBudgets
 });
 
