@@ -223,10 +223,19 @@ async function doSignup() {
   const acct={id,name,phone,pw:hashFn(pw),qs:qs.map(x=>({q:x.q,a:hashFn(x.a)})),createdAt:todayStr()};
   setLoading(true);
   try {
-    await saveAccount(acct);
-    await saveUserData(id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),profile:{name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
+    await Promise.race([
+      (async()=>{
+        await saveAccount(acct);
+        await saveUserData(id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),profile:{name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
+      })(),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))
+    ]);
     state.accounts.push(acct);cacheAccounts();
-  } catch(e){setLoading(false);showNotice('signup-notice','서버 오류가 발생했습니다.',false);return;}
+  } catch(e) {
+    setLoading(false);
+    showNotice('signup-notice', e.message==='timeout'?'서버 응답이 없습니다. 네트워크를 확인해주세요.':'서버 오류가 발생했습니다.',false);
+    return;
+  }
   setLoading(false);
   go('login');
   setTimeout(()=>showNotice('login-notice','가입이 완료되었습니다. 로그인해 주세요.',true),50);
@@ -302,32 +311,83 @@ function saveGoal(field,val) { if(field==='target') val=String(val).replace(/[^0
 
 // ── ADMIN ──
 function renderAdmin() {
-  const el=document.getElementById('admin-list');if(!el)return;
-  document.getElementById('admin-sub').textContent='가입 계정 '+state.accounts.length+'개 · 비밀번호는 해시로만 보관';
-  el.innerHTML=state.accounts.map(a=>`
-    <div class="card" style="padding:14px 15px">
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="font-size:14.5px;font-weight:700;color:var(--ink)">${a.name}</span>
-        <span style="font-size:11.5px;color:var(--muted)">@${a.id}</span>
+  const listEl=document.getElementById('admin-list');if(!listEl)return;
+  const q=(document.getElementById('admin-search')||{}).value?.trim().toLowerCase()||'';
+  // 통계
+  const thisMonth=todayStr().slice(0,7);
+  const newThisMonth=state.accounts.filter(a=>a.createdAt&&a.createdAt.startsWith(thisMonth)).length;
+  const statsEl=document.getElementById('admin-stats');
+  if(statsEl) statsEl.innerHTML=`
+    <div style="flex:1;padding:13px 0;text-align:center;border-right:1px solid var(--line)">
+      <div style="font-size:20px;font-weight:800;color:var(--blue)">${state.accounts.length}</div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:2px">전체 회원</div>
+    </div>
+    <div style="flex:1;padding:13px 0;text-align:center;border-right:1px solid var(--line)">
+      <div style="font-size:20px;font-weight:800;color:var(--green)">${newThisMonth}</div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:2px">이번달 신규</div>
+    </div>
+    <div style="flex:1;padding:13px 0;text-align:center">
+      <div style="font-size:20px;font-weight:800;color:var(--ink)">${state.accounts.filter(a=>a.phone).length}</div>
+      <div style="font-size:10.5px;color:var(--faint);margin-top:2px">전화번호 등록</div>
+    </div>`;
+  document.getElementById('admin-sub').textContent='총 '+state.accounts.length+'명 · 비밀번호는 해시로만 보관';
+  // 검색 필터
+  const filtered=q
+    ? state.accounts.filter(a=>a.name.toLowerCase().includes(q)||a.id.toLowerCase().includes(q))
+    : state.accounts;
+  if(!filtered.length){
+    listEl.innerHTML=`<div style="text-align:center;padding:32px 0;font-size:13px;color:var(--faint)">${q?`'${q}' 검색 결과가 없습니다.`:'등록된 회원이 없습니다.'}</div>`;
+    return;
+  }
+  // 가입일 역순 정렬
+  const sorted=[...filtered].sort((a,b)=>a.createdAt<b.createdAt?1:-1);
+  listEl.innerHTML=sorted.map(a=>{
+    const initial=(a.name||'?')[0];
+    const colors=['#1a57d6','#12864f','#4b4fc4','#c24a7a','#b5720d'];
+    const color=colors[a.id.charCodeAt(0)%colors.length];
+    return`<div class="card" style="padding:0;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:13px;padding:14px 15px">
+        <div style="width:42px;height:42px;border-radius:50%;background:${color};color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex:none">${initial}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:14.5px;font-weight:700;color:var(--ink)">${a.name}</span>
+            <span style="font-size:11px;color:var(--muted);background:var(--track);padding:2px 7px;border-radius:999px">@${a.id}</span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:7px">
+            <span style="font-size:11px;color:var(--faint)">📱 ${maskPhone(a.phone)}</span>
+            <span style="font-size:11px;color:var(--faint)">·</span>
+            <span style="font-size:11px;color:var(--faint)">가입 ${a.createdAt||'—'}</span>
+          </div>
+        </div>
+        <div onclick="confirmRemoveAccount('${a.id}')" style="width:32px;height:32px;border-radius:var(--r-sm);background:var(--red-tint);color:var(--red);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:none;font-size:15px">🗑</div>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
-        <span class="badge" style="background:var(--track);color:var(--muted)">${maskPhone(a.phone)}</span>
-        <span class="badge" style="background:var(--track);color:var(--muted)">질문 ${a.qs.length}개</span>
-        <span class="badge" style="background:var(--track);color:var(--muted)">가입 ${a.createdAt}</span>
+      <div style="border-top:1px solid var(--line);display:flex">
+        <div onclick="loadAccount('${a.id}')" style="flex:1;padding:11px 0;text-align:center;font-size:12px;font-weight:600;color:var(--blue);cursor:pointer;border-right:1px solid var(--line)">데이터 보기</div>
+        <div onclick="copyAdminInfo('${a.id}')" style="flex:1;padding:11px 0;text-align:center;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer">정보 복사</div>
       </div>
-      <div style="display:flex;gap:7px;margin-top:12px">
-        <div onclick="loadAccount('${a.id}')" style="flex:1;height:38px;border-radius:var(--r-md);background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;cursor:pointer">데이터 열기</div>
-        <div onclick="removeAccount('${a.id}')" style="width:44px;height:38px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;flex:none">삭제</div>
-      </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
+
+function confirmRemoveAccount(id) {
+  const a=state.accounts.find(x=>x.id===id);
+  if(!a)return;
+  if(!confirm(`[${a.name}] (@${a.id}) 회원을 삭제하시겠습니까?\n\n• 가입일: ${a.createdAt||'—'}\n• 연락처: ${maskPhone(a.phone)}\n\n삭제 후 복구할 수 없습니다.`))return;
+  removeAccount(id);
+}
+
 async function removeAccount(id) {
-  if(!confirm(id+' 계정을 삭제하시겠습니까?'))return;
   state.accounts=state.accounts.filter(a=>a.id!==id);
   cacheAccounts();
-  try{sessionStorage.removeItem('gb_ud_'+id);}catch(e){}
+  try{sessionStorage.removeItem('gb_ud_'+id);localStorage.removeItem('gb_auth');}catch(e){}
   deleteAccount(id).catch(console.error);
   renderAdmin();
+}
+
+function copyAdminInfo(id) {
+  const a=state.accounts.find(x=>x.id===id);if(!a)return;
+  const text=`이름: ${a.name}\n아이디: ${a.id}\n연락처: ${maskPhone(a.phone)}\n가입일: ${a.createdAt||'—'}`;
+  navigator.clipboard?.writeText(text).then(()=>showToast('정보를 클립보드에 복사했습니다.')).catch(()=>showToast('복사 실패'));
 }
 
 // ── DRAFT (입력 탭) ──
@@ -372,7 +432,9 @@ function saveDrafts() {
   if(!valid.length){showToast('저장할 항목이 없습니다.');return;}
   valid.forEach(d=>state.txs.push({id:nid(),name:d.name.trim(),date:d.date,group:d.group,cat:d.cat||'미분류',amount:num(d.amount),note:d.note}));
   state.drafts=[{id:nid(),name:'',date:todayStr(),group:'변동지출',cat:'',amount:'',note:''}];
-  renderInput(); bgSave(); showToast(valid.length+'건 저장되었습니다.');
+  bgSave();
+  showToast(valid.length+'건 저장되었습니다.');
+  switchTab('ledger');
 }
 
 // ── TRANSACTION EDIT / DELETE ──
@@ -840,8 +902,10 @@ function renderCatManage() {
           <span style="font-size:13px;font-weight:600;color:var(--ink)">${won(amt)}</span>
         </div>
         <div class="chip-group" style="margin-bottom:10px">
-          ${cats.map(c=>`<div class="chip" style="background:${gc(g).bg};color:${gc(g).fg};border-color:${gc(g).c};display:flex;align-items:center;gap:4px;padding-right:4px">
-            ${c.name}<span onclick="removeCat('${g}','${c.name}')" style="font-size:14px;line-height:1;cursor:pointer;opacity:.65;margin-left:2px">×</span>
+          ${cats.map(c=>`<div class="chip" style="background:${gc(g).bg};color:${gc(g).fg};border-color:${gc(g).c};display:flex;align-items:center;gap:3px;padding-right:4px">
+            <span onclick="openEditCat('${g}','${c.name}')" style="cursor:pointer">${c.name}</span>
+            <span onclick="openEditCat('${g}','${c.name}')" style="font-size:10px;cursor:pointer;opacity:.55;margin-left:1px">✏</span>
+            <span onclick="removeCat('${g}','${c.name}')" style="font-size:14px;line-height:1;cursor:pointer;opacity:.55;margin-left:2px">×</span>
           </div>`).join('')}
         </div>
         <div style="display:flex;gap:7px">
@@ -871,8 +935,46 @@ function addCat(group,name) {
   state.cats.push({name,group}); bgSave(); renderCatManage();
 }
 function removeCat(group,catName) {
-  if(!confirm(`'${catName}' 카테고리를 삭제하시겠습니까?`))return;
-  state.cats=state.cats.filter(c=>!(c.group===group&&c.name===catName)); bgSave(); renderCatManage();
+  const used=state.txs.filter(t=>t.group===group&&t.cat===catName).length;
+  if(used>0) {
+    if(!confirm(`'${catName}' 카테고리는 ${used}건의 거래에 사용 중입니다.\n삭제 시 해당 거래의 카테고리가 '미분류'로 변경됩니다.\n계속하시겠습니까?`))return;
+    state.txs=state.txs.map(t=>t.group===group&&t.cat===catName?{...t,cat:'미분류'}:t);
+  } else {
+    if(!confirm(`'${catName}' 카테고리를 삭제하시겠습니까?`))return;
+  }
+  state.cats=state.cats.filter(c=>!(c.group===group&&c.name===catName));
+  bgSave(); renderCatManage();
+}
+
+function openEditCat(group,oldName) {
+  const ex=document.getElementById('cat-edit-modal');if(ex)ex.remove();
+  const modal=document.createElement('div');
+  modal.id='cat-edit-modal';modal.className='modal-backdrop';
+  modal.innerHTML=`
+    <div class="modal-box">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div class="modal-title" style="margin-bottom:0">카테고리 수정</div>
+        <div onclick="closeCatEditModal()" style="font-size:22px;color:var(--muted);cursor:pointer;padding:0 4px;line-height:1">×</div>
+      </div>
+      <div class="lbl">카테고리 이름</div>
+      <input id="cat-edit-inp" class="inp-sm" style="width:100%;margin-bottom:18px" value="${oldName.replace(/"/g,'&quot;')}">
+      <div style="display:flex;gap:9px">
+        <button onclick="closeCatEditModal()" class="btn-outline" style="height:44px;font-size:13px;flex:1">취소</button>
+        <button onclick="renameCat('${group}','${oldName}',document.getElementById('cat-edit-inp').value)" class="btn-blue" style="height:44px;font-size:13px;flex:2">저장</button>
+      </div>
+    </div>`;
+  document.getElementById('app').appendChild(modal);
+  setTimeout(()=>document.getElementById('cat-edit-inp')?.focus(),50);
+}
+function closeCatEditModal() { const el=document.getElementById('cat-edit-modal');if(el)el.remove(); }
+function renameCat(group,oldName,newName) {
+  newName=(newName||'').trim();
+  if(!newName){showToast('카테고리 이름을 입력하세요.');return;}
+  if(newName===oldName){closeCatEditModal();return;}
+  if(state.cats.some(c=>c.group===group&&c.name===newName)){showToast('이미 존재하는 카테고리입니다.');return;}
+  state.cats=state.cats.map(c=>c.group===group&&c.name===oldName?{...c,name:newName}:c);
+  state.txs=state.txs.map(t=>t.group===group&&t.cat===oldName?{...t,cat:newName}:t);
+  closeCatEditModal(); bgSave(); renderCatManage();
 }
 function addGroup(name) {
   name=(name||'').trim();
@@ -1006,7 +1108,7 @@ function renderMypage() {
 
 // ── GLOBAL BINDINGS ──
 Object.assign(window,{
-  state,go,switchTab,logout,loadAccount,removeAccount,
+  state,go,switchTab,logout,loadAccount,removeAccount,confirmRemoveAccount,copyAdminInfo,
   doLogin,doSignup,shuffleQs,setFindMode,rotateQ,doFind,
   saveProfile,saveGoal,
   patchDraft,setDraftGroup,addDraft,removeDraft,setDraftField,saveDrafts,
@@ -1016,7 +1118,7 @@ Object.assign(window,{
   openProfileEdit,closeProfileEdit,saveProfileEdit,handlePhotoUpload,
   goApp,renderBudgetInput,renderCatManage,
   setBudgetAndRefresh,clearGroupBudget,fillFromLastMonth,
-  addCat,removeCat,addGroup,
+  addCat,removeCat,openEditCat,closeCatEditModal,renameCat,addGroup,
   resetLedger,resetAssets,resetBudgets
 });
 
