@@ -1,7 +1,8 @@
 import './style.css';
+import { fetchAccounts, saveAccount, deleteAccount, fetchUserData, saveUserData } from './db.js';
 
 // ─────────────────────────────────────────
-//  데이터 & 유틸
+//  상수 & 유틸
 // ─────────────────────────────────────────
 const GROUPS = ['수입', '저축/투자', '고정지출', '변동지출', '이쁜이'];
 const GC = {
@@ -21,32 +22,6 @@ const AT = {
   '대출':  { c:'#9aa3b0', bg:'#eceff5', fg:'#6b7482' }
 };
 const AT_ORDER = ['현금','적금','예금','연금','주식','청약','대출'];
-const SEED = {
-  '202607': {'수입':3978847,'저축/투자':2100000,'고정지출':502381,'변동지출':2655259,'이쁜이':339000},
-  '202608': {}
-};
-const SEED_DATA = {
-  txs: [
-    {id:1,name:'리디충전',date:'2026-08-01',group:'고정지출',cat:'통신/구독',amount:10000,note:''},
-    {id:2,name:'이쁜이사료',date:'2026-08-02',group:'이쁜이',cat:'이쁜이사료',amount:45080,note:''},
-    {id:3,name:'시험접수',date:'2026-08-03',group:'변동지출',cat:'취미',amount:28000,note:''},
-    {id:4,name:'면세점',date:'2026-08-03',group:'변동지출',cat:'쇼핑',amount:18157,note:'다인'}
-  ],
-  assets: [
-    {id:1,name:'케이뱅크(생활비)',type:'현금',amount:395494,checked:false},
-    {id:2,name:'월급통장',type:'현금',amount:749849,checked:false},
-    {id:3,name:'봉봉(여행)',type:'현금',amount:1031326,checked:false},
-    {id:4,name:'케이뱅크파킹',type:'현금',amount:28689218,checked:false},
-    {id:5,name:'모니모 비상금',type:'현금',amount:2071251,checked:false},
-    {id:6,name:'청년도약계좌',type:'적금',amount:13300000,checked:false},
-    {id:7,name:'퇴직연금',type:'연금',amount:26482680,checked:false},
-    {id:8,name:'주식',type:'주식',amount:3000000,checked:true}
-  ],
-  budgets: {
-    '202607':{'저축/투자':2100000,'고정지출':500000,'변동지출':2660000,'이쁜이':340000},
-    '202608':{'저축/투자':2100000,'고정지출':500000,'변동지출':2660000,'이쁜이':340000}
-  }
-};
 const DEF_CATS = [
   {name:'고정수입',group:'수입'},{name:'부수입',group:'수입'},
   {name:'연금저축',group:'저축/투자'},{name:'적금',group:'저축/투자'},
@@ -72,10 +47,11 @@ const won   = (n) => '₩' + Math.round(n).toLocaleString('ko-KR');
 const short = (n) => { const a = Math.abs(n); if (a >= 1e8) return (n/1e8).toFixed(a>=1e9?0:1).replace(/\.0$/,'')+'억'; if (a >= 1e4) return Math.round(n/1e4).toLocaleString('ko-KR')+'만'; return n.toLocaleString('ko-KR'); };
 const pct   = (n) => (Math.round(n*10)/10).toFixed(n%1===0?0:1) + '%';
 const num   = (v) => { const n = parseInt(String(v).replace(/[^0-9-]/g,''), 10); return isNaN(n) ? 0 : n; };
-const digits     = (v) => String(v).replace(/[^0-9]/g,'');
-const maskPhone  = (p) => p.length >= 10 ? p.slice(0,3)+'-****-'+p.slice(-4) : p;
+const digits    = (v) => String(v).replace(/[^0-9]/g,'');
+const maskPhone = (p) => p && p.length >= 10 ? p.slice(0,3)+'-****-'+p.slice(-4) : (p || '—');
 const gc = (g) => GC[g] || { c:'#9aa3b0', bg:'#eceff5', fg:'#6b7482' };
 const at = (t) => AT[t] || { c:'#9aa3b0', bg:'#eceff5', fg:'#6b7482' };
+const todayStr = () => { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 
 // ─────────────────────────────────────────
 //  STATE
@@ -83,17 +59,16 @@ const at = (t) => AT[t] || { c:'#9aa3b0', bg:'#eceff5', fg:'#6b7482' };
 const state = {
   screen: 'landing',
   tab: 'dash',
-  year: '2026', mon: '08',
-  profile: { name:'다인', age:'31' },
-  goal: { name:'1억 순자산', target:'100000000' },
-  txs: JSON.parse(JSON.stringify(SEED_DATA.txs)),
-  assets: JSON.parse(JSON.stringify(SEED_DATA.assets)),
-  budgets: JSON.parse(JSON.stringify(SEED_DATA.budgets)),
+  year: String(new Date().getFullYear()),
+  mon:  String(new Date().getMonth()+1).padStart(2,'0'),
+  profile: { name:'', age:'' },
+  goal: { name:'목표 설정', target:'0' },
+  txs: [], assets: [], budgets: {},
   groups: GROUPS.slice(),
   cats: DEF_CATS.slice(),
   openGroups: {},
   authId: null,
-  accounts: [{ id:'dain', name:'다인', phone:'01012345678', pw:hashFn('dain1234'), qs:[{q:QPOOL[0],a:hashFn('상도동')}], createdAt:'2026-07-01' }],
+  accounts: [{ id:'test1', name:'테스트', phone:'', pw:hashFn('1234'), qs:[{q:QPOOL[0],a:hashFn('test')}], createdAt:todayStr() }],
   drafts: [],
   signupQs: [],
   findMode: 'id',
@@ -101,9 +76,16 @@ const state = {
   newAssetType: '현금',
   seq: 100
 };
-let savedAccountData = {};
 
 function nid() { return ++state.seq; }
+
+// ─────────────────────────────────────────
+//  LOADING
+// ─────────────────────────────────────────
+function setLoading(v) {
+  const el = document.getElementById('loading-overlay');
+  if (el) el.style.display = v ? 'flex' : 'none';
+}
 
 // ─────────────────────────────────────────
 //  COMPUTED HELPERS
@@ -115,18 +97,28 @@ function prevKeys() {
   return pn >= 1 ? [state.year + String(pn).padStart(2,'0')] : [String(Number(state.year)-1) + '12'];
 }
 function groupSum(keys, g) {
-  const base = keys.reduce((s,k) => s + ((SEED[k] && SEED[k][g]) || 0), 0);
-  return base + state.txs
+  return state.txs
     .filter(t => keys.includes(t.date.replace(/-/g,'').slice(0,6)) && t.group === g)
     .reduce((s,t) => s + num(t.amount), 0);
 }
-function spendGroups()   { return state.groups.filter(g => g !== '수입' && g !== '저축/투자'); }
-function spendTotal(keys){ return spendGroups().reduce((s,g) => s + groupSum(keys,g), 0); }
-function assetTotal()    { return state.assets.filter(a => a.type !== '대출').reduce((s,a) => s + num(a.amount), 0); }
-function debtTotal()     { return state.assets.filter(a => a.type === '대출').reduce((s,a) => s + num(a.amount), 0); }
-function netWorth()      { return assetTotal() - debtTotal(); }
-function budgetFor(key)  { return state.budgets[key] || {}; }
-function monthTxs(keys)  { return state.txs.filter(t => keys.includes(t.date.replace(/-/g,'').slice(0,6))).sort((a,b) => a.date < b.date ? 1 : -1); }
+function spendGroups()    { return state.groups.filter(g => g !== '수입' && g !== '저축/투자'); }
+function spendTotal(keys) { return spendGroups().reduce((s,g) => s + groupSum(keys,g), 0); }
+function assetTotal()     { return state.assets.filter(a => a.type !== '대출').reduce((s,a) => s + num(a.amount), 0); }
+function debtTotal()      { return state.assets.filter(a => a.type === '대출').reduce((s,a) => s + num(a.amount), 0); }
+function netWorth()       { return assetTotal() - debtTotal(); }
+function budgetFor(key)   { return state.budgets[key] || {}; }
+function monthTxs(keys)   { return state.txs.filter(t => keys.includes(t.date.replace(/-/g,'').slice(0,6))).sort((a,b) => a.date < b.date ? 1 : -1); }
+function snapshotData()   {
+  return {
+    txs:     state.txs.slice(),
+    assets:  state.assets.slice(),
+    budgets: { ...state.budgets },
+    cats:    state.cats.slice(),
+    groups:  state.groups.slice(),
+    profile: { ...state.profile },
+    goal:    { ...state.goal }
+  };
+}
 
 // ─────────────────────────────────────────
 //  NAVIGATION
@@ -146,19 +138,34 @@ function switchTab(tab) {
   document.getElementById('scroll-area').scrollTop = 0;
 }
 
-function logout() {
-  if (state.authId) savedAccountData[state.authId] = snapshotData();
+async function logout() {
+  if (state.authId) {
+    setLoading(true);
+    try { await saveUserData(state.authId, snapshotData()); } catch(e) { console.error('로그아웃 저장 실패:', e); }
+    setLoading(false);
+  }
   state.screen = 'landing'; state.authId = null; state.tab = 'dash';
   render();
 }
 
-function snapshotData() {
-  return { txs:state.txs.slice(), assets:state.assets.slice(), budgets:{...state.budgets}, cats:state.cats.slice(), groups:state.groups.slice(), profile:{...state.profile}, goal:{...state.goal} };
+// ─────────────────────────────────────────
+//  AUTH
+// ─────────────────────────────────────────
+async function doLogin() {
+  const id = (document.getElementById('l-id').value || '').trim();
+  const pw = document.getElementById('l-pw').value || '';
+  if (!id || !pw) { showNotice('login-notice','아이디와 비밀번호를 입력하세요.',false); return; }
+  if (id === 'admin' && pw === 'admin') { go('admin'); renderAdmin(); return; }
+  const acct = state.accounts.find(a => a.id === id);
+  if (!acct || acct.pw !== hashFn(pw)) { showNotice('login-notice','아이디 또는 비밀번호가 올바르지 않습니다.',false); return; }
+  await loadAccount(id);
 }
 
-function loadAccount(id) {
-  const seed = id === 'dain' ? { ...SEED_DATA, cats:DEF_CATS.slice(), groups:GROUPS.slice(), profile:{name:'다인',age:'31'}, goal:{name:'1억 순자산',target:'100000000'} } : null;
-  const d = savedAccountData[id] || seed;
+async function loadAccount(id) {
+  setLoading(true);
+  let d = null;
+  try { d = await fetchUserData(id); } catch(e) { console.error('데이터 로드 실패:', e); }
+  setLoading(false);
   if (d) {
     state.txs     = JSON.parse(JSON.stringify(d.txs || []));
     state.assets  = JSON.parse(JSON.stringify(d.assets || []));
@@ -166,29 +173,22 @@ function loadAccount(id) {
     state.cats    = (d.cats || DEF_CATS).slice();
     state.groups  = (d.groups || GROUPS).slice();
     state.profile = { ...(d.profile || { name:id, age:'' }) };
-    state.goal    = { ...(d.goal || { name:'목표', target:'0' }) };
+    state.goal    = { ...(d.goal || { name:'목표 설정', target:'0' }) };
+  } else {
+    state.txs = []; state.assets = []; state.budgets = {};
+    state.cats = DEF_CATS.slice(); state.groups = GROUPS.slice();
+    const acct = state.accounts.find(a => a.id === id);
+    state.profile = { name: acct ? acct.name : id, age:'' };
+    state.goal    = { name:'목표 설정', target:'0' };
   }
   state.authId = id;
   state.screen = 'app';
   state.tab    = 'dash';
-  state.drafts = [{ id:nid(), name:'', date:'2026-08-04', group:'변동지출', cat:'', amount:'', note:'' }];
+  state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
   render();
 }
 
-// ─────────────────────────────────────────
-//  AUTH
-// ─────────────────────────────────────────
-function doLogin() {
-  const id = (document.getElementById('l-id').value || '').trim();
-  const pw = document.getElementById('l-pw').value || '';
-  if (!id || !pw) { showNotice('login-notice','아이디와 비밀번호를 입력하세요.',false); return; }
-  if (id === 'admin' && pw === 'admin') { go('admin'); renderAdmin(); return; }
-  const acct = state.accounts.find(a => a.id === id);
-  if (!acct || acct.pw !== hashFn(pw)) { showNotice('login-notice','아이디 또는 비밀번호가 올바르지 않습니다.',false); return; }
-  loadAccount(id);
-}
-
-function doSignup() {
+async function doSignup() {
   const name  = (document.getElementById('su-name').value || '').trim();
   const id    = (document.getElementById('su-id').value || '').trim();
   const pw    = document.getElementById('su-pw').value || '';
@@ -202,9 +202,18 @@ function doSignup() {
   if (phone.length < 10) { showNotice('signup-notice','휴대폰 번호를 정확히 입력하세요.',false); return; }
   const qs = state.signupQs.map((q,i) => ({ q, a:(document.getElementById('su-q'+i)||{value:''}).value.trim() }));
   if (qs.some(x => !x.a)) { showNotice('signup-notice','비밀번호 찾기 질문 3개에 모두 답해주세요.',false); return; }
-  const acct = { id, name, phone, pw:hashFn(pw), qs:qs.map(x => ({q:x.q, a:hashFn(x.a)})), createdAt:'2026-08-06' };
-  state.accounts.push(acct);
-  savedAccountData[id] = { txs:[], assets:[], budgets:{}, cats:DEF_CATS.slice(), groups:GROUPS.slice(), profile:{name,age:''}, goal:{name:'목표 설정',target:'0'} };
+  const acct = { id, name, phone, pw:hashFn(pw), qs:qs.map(x => ({q:x.q, a:hashFn(x.a)})), createdAt:todayStr() };
+  setLoading(true);
+  try {
+    await saveAccount(acct);
+    await saveUserData(id, { txs:[], assets:[], budgets:{}, cats:DEF_CATS.slice(), groups:GROUPS.slice(), profile:{name,age:''}, goal:{name:'목표 설정',target:'0'} });
+    state.accounts.push(acct);
+  } catch(e) {
+    setLoading(false);
+    showNotice('signup-notice','서버 오류가 발생했습니다. 다시 시도해 주세요.',false);
+    return;
+  }
+  setLoading(false);
   go('login');
   setTimeout(() => showNotice('login-notice','가입이 완료되었습니다. 로그인해 주세요.',true), 50);
 }
@@ -250,7 +259,7 @@ function rotateQ() {
   state.findQIdx = (state.findQIdx + 1) % acct.qs.length;
   updateFindQ();
 }
-function doFind() {
+async function doFind() {
   const mode = state.findMode;
   clearNotice('find-notice');
   if (mode === 'id') {
@@ -265,14 +274,17 @@ function doFind() {
     const ans   = (document.getElementById('f-ans').value || '').trim();
     const npw   = document.getElementById('f-npw').value || '';
     const acct  = state.accounts.find(a => a.id === id);
-    if (!acct)           { showNotice('find-notice','가입된 아이디가 아닙니다.',false); return; }
-    if (acct.phone !== phone) { showNotice('find-notice','휴대폰 번호가 일치하지 않습니다.',false); return; }
+    if (!acct)               { showNotice('find-notice','가입된 아이디가 아닙니다.',false); return; }
+    if (acct.phone !== phone){ showNotice('find-notice','휴대폰 번호가 일치하지 않습니다.',false); return; }
     const q = acct.qs[state.findQIdx % acct.qs.length];
-    if (!ans)            { showNotice('find-notice','질문에 답해주세요.',false); return; }
+    if (!ans)                { showNotice('find-notice','질문에 답해주세요.',false); return; }
     if (q.a !== hashFn(ans)) { showNotice('find-notice','질문 답이 일치하지 않습니다.',false); return; }
-    if (npw.length < 6)  { showNotice('find-notice','새 비밀번호는 6자 이상 입력하세요.',false); return; }
+    if (npw.length < 6)      { showNotice('find-notice','새 비밀번호는 6자 이상 입력하세요.',false); return; }
     acct.pw = hashFn(npw);
-    showNotice('find-notice','비밀번호가 변경되었습니다.',true);
+    setLoading(true);
+    try { await saveAccount(acct); showNotice('find-notice','비밀번호가 변경되었습니다.',true); }
+    catch(e) { showNotice('find-notice','저장 실패. 다시 시도해 주세요.',false); }
+    setLoading(false);
   }
 }
 
@@ -290,20 +302,21 @@ function renderAdmin() {
       </div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">
         <span class="badge" style="background:var(--track);color:var(--muted)">${maskPhone(a.phone)}</span>
-        <span class="badge" style="background:var(--track);color:var(--muted)">원자료 ${(savedAccountData[a.id]||{txs:[]}).txs?.length||0}건</span>
         <span class="badge" style="background:var(--track);color:var(--muted)">질문 ${a.qs.length}개</span>
+        <span class="badge" style="background:var(--track);color:var(--muted)">가입 ${a.createdAt}</span>
       </div>
-      <div style="font-family:ui-monospace,Menlo,monospace;font-size:10px;color:var(--faint);margin-top:9px">가입 ${a.createdAt}</div>
       <div style="display:flex;gap:7px;margin-top:12px">
         <div onclick="loadAccount('${a.id}')" style="flex:1;height:38px;border-radius:var(--r-md);background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;cursor:pointer">데이터 열기</div>
         <div onclick="removeAccount('${a.id}')" style="width:44px;height:38px;border-radius:var(--r-md);background:var(--red-tint);color:var(--red);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer;flex:none">삭제</div>
       </div>
     </div>`).join('');
 }
-function removeAccount(id) {
+async function removeAccount(id) {
   if (!confirm(id+' 계정을 삭제하시겠습니까?')) return;
+  setLoading(true);
+  try { await deleteAccount(id); } catch(e) { console.error(e); }
   state.accounts = state.accounts.filter(a => a.id !== id);
-  delete savedAccountData[id];
+  setLoading(false);
   renderAdmin();
 }
 
@@ -311,7 +324,7 @@ function removeAccount(id) {
 //  DRAFT
 // ─────────────────────────────────────────
 function addDraft() {
-  state.drafts.push({ id:nid(), name:'', date:'2026-08-04', group:'변동지출', cat:'', amount:'', note:'' });
+  state.drafts.push({ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' });
   if (state.screen === 'app' && state.tab === 'input') renderInput();
 }
 function removeDraft(id) {
@@ -322,19 +335,24 @@ function setDraftField(id, field, val) {
   state.drafts = state.drafts.map(d => d.id === id ? { ...d, [field]:val } : d);
   renderInput();
 }
-function saveDrafts() {
+async function saveDrafts() {
   const valid = state.drafts.filter(d => d.name.trim() && d.amount);
   if (!valid.length) { showToast('저장할 항목이 없습니다.'); return; }
   valid.forEach(d => state.txs.push({ id:nid(), name:d.name.trim(), date:d.date, group:d.group, cat:d.cat||'미분류', amount:num(d.amount), note:d.note }));
-  state.drafts = [{ id:nid(), name:'', date:'2026-08-04', group:'변동지출', cat:'', amount:'', note:'' }];
-  showToast(valid.length+'건 저장되었습니다.');
+  state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
   renderInput();
+  try {
+    await saveUserData(state.authId, snapshotData());
+    showToast(valid.length+'건 저장되었습니다.');
+  } catch(e) {
+    showToast('저장 실패. 다시 시도해 주세요.');
+  }
 }
 
 // ─────────────────────────────────────────
 //  ASSETS
 // ─────────────────────────────────────────
-function addAsset() {
+async function addAsset() {
   const name   = document.getElementById('new-asset-name').value.trim();
   const amount = num(document.getElementById('new-asset-amount').value);
   if (!name) { showToast('자산 이름을 입력하세요.'); return; }
@@ -342,14 +360,20 @@ function addAsset() {
   document.getElementById('new-asset-name').value   = '';
   document.getElementById('new-asset-amount').value = '';
   renderAssets();
+  try { await saveUserData(state.authId, snapshotData()); }
+  catch(e) { showToast('저장 실패.'); }
 }
+let _assetSaveTimer;
 function setAssetAmount(id, val) {
   state.assets = state.assets.map(a => a.id === id ? { ...a, amount:num(val) } : a);
   renderAssetSummary();
+  clearTimeout(_assetSaveTimer);
+  _assetSaveTimer = setTimeout(() => saveUserData(state.authId, snapshotData()).catch(console.error), 800);
 }
-function toggleAssetCheck(id) {
+async function toggleAssetCheck(id) {
   state.assets = state.assets.map(a => a.id === id ? { ...a, checked:!a.checked } : a);
   renderAssets();
+  try { await saveUserData(state.authId, snapshotData()); } catch(e) {}
 }
 
 // ─────────────────────────────────────────
@@ -360,12 +384,12 @@ function showNotice(elId, msg, ok) {
   el.innerHTML = `<div class="notice ${ok?'notice-ok':'notice-err'}">${msg}</div>`;
 }
 function clearNotice(elId) { const el = document.getElementById(elId); if (el) el.innerHTML = ''; }
-let toastTimer;
+let _toastTimer;
 function showToast(msg) {
   const el = document.getElementById('toast');
   el.textContent = msg; el.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
 }
 
 // ─────────────────────────────────────────
@@ -414,11 +438,11 @@ function render() {
     } else {
       sb.style.background='var(--card)'; sb.style.color='var(--ink)';
     }
-    if      (state.tab === 'dash')    renderDash();
-    else if (state.tab === 'ledger')  renderLedger();
-    else if (state.tab === 'input')   renderInput();
-    else if (state.tab === 'assets')  renderAssets();
-    else if (state.tab === 'mypage')  renderMypage();
+    if      (state.tab === 'dash')   renderDash();
+    else if (state.tab === 'ledger') renderLedger();
+    else if (state.tab === 'input')  renderInput();
+    else if (state.tab === 'assets') renderAssets();
+    else if (state.tab === 'mypage') renderMypage();
   }
 }
 
@@ -452,15 +476,17 @@ function renderDash() {
       const sum = state.assets.filter(a => a.type === t).reduce((s,a) => s + num(a.amount), 0);
       return `<div class="legend-item"><div class="legend-dot" style="background:${at(t).c}"></div><span class="legend-label">${t}</span><span class="legend-pct">${pct(sum/totalAssets*100)}</span></div>`;
     }).join('');
+  } else {
+    barEl.innerHTML = ''; legEl.innerHTML = '';
   }
 
   const top = state.assets.filter(a => a.type !== '대출').sort((a,b) => num(b.amount) - num(a.amount)).slice(0,5);
-  document.getElementById('d-asset-list').innerHTML = top.map(a => `
+  document.getElementById('d-asset-list').innerHTML = top.length ? top.map(a => `
     <div class="asset-list-item">
       <span class="badge" style="background:${at(a.type).bg};color:${at(a.type).fg}">${a.type}</span>
       <span style="font-size:13px;color:var(--ink);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.name}</span>
       <span style="font-size:13px;font-weight:600;color:var(--ink)">${won(num(a.amount))}</span>
-    </div>`).join('') + (top.length === 0 ? '<div style="padding:22px;text-align:center;font-size:12px;color:var(--faint)">등록된 자산이 없습니다.</div>' : '');
+    </div>`).join('') : '<div style="padding:22px;text-align:center;font-size:12px;color:var(--faint)">등록된 자산이 없습니다.</div>';
 
   document.getElementById('d-group-title').textContent = state.year+'년 '+Number(state.mon)+'월 구분별 합계';
   const maxG = Math.max(1, ...GROUPS.map(g => groupSum(keys,g)));
@@ -499,7 +525,8 @@ function renderLedger() {
 
   ['ledger-year','my-year'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
-    el.innerHTML = ['2024','2025','2026','2027'].map(y => `<option value="${y}" ${y===state.year?'selected':''}>${y}년</option>`).join('');
+    const cur = Number(state.year);
+    el.innerHTML = [cur-1,cur,cur+1].map(y => `<option value="${y}" ${y===Number(state.year)?'selected':''}>${y}년</option>`).join('');
   });
   ['ledger-mon','my-mon'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
@@ -610,8 +637,8 @@ function renderInput() {
   }).join('');
   const sb  = document.getElementById('save-btn');
   const cnt = state.drafts.filter(d => d.name.trim() && d.amount).length;
-  sb.textContent       = cnt ? `${cnt}건 저장` : '항목을 입력하세요';
-  sb.style.background  = cnt ? 'var(--blue)' : 'var(--disabled)';
+  sb.textContent      = cnt ? `${cnt}건 저장` : '항목을 입력하세요';
+  sb.style.background = cnt ? 'var(--blue)' : 'var(--disabled)';
 }
 
 // ─────────────────────────────────────────
@@ -652,11 +679,12 @@ function renderAssetSummary() {
 //  MYPAGE
 // ─────────────────────────────────────────
 function renderMypage() {
-  const keys = currentKeys();
+  const keys = currentKeys(), prevK = prevKeys();
   const acct = state.accounts.find(a => a.id === state.authId);
   ['ledger-year','my-year'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
-    el.innerHTML = ['2024','2025','2026','2027'].map(y => `<option value="${y}" ${y===state.year?'selected':''}>${y}년</option>`).join('');
+    const cur = Number(state.year);
+    el.innerHTML = [cur-1,cur,cur+1].map(y => `<option value="${y}" ${y===Number(state.year)?'selected':''}>${y}년</option>`).join('');
   });
   ['ledger-mon','my-mon'].forEach(id => {
     const el = document.getElementById(id); if (!el) return;
@@ -671,7 +699,6 @@ function renderMypage() {
   if (ai) ai.value = state.profile.age;
   document.getElementById('my-month-title').textContent = state.year+'년 '+Number(state.mon)+'월 대분류별 합계';
 
-  const prevK = prevKeys();
   document.getElementById('my-group-list').innerHTML = GROUPS.map(g => {
     const amt = groupSum(keys,g), pv = groupSum(prevK,g), d = amt - pv;
     return `<div style="display:flex;align-items:center;gap:10px;padding:13px 0;border-bottom:1px solid var(--line)">
@@ -694,7 +721,7 @@ function renderMypage() {
 }
 
 // ─────────────────────────────────────────
-//  GLOBAL BINDINGS  (onclick="" 핸들러용)
+//  GLOBAL BINDINGS
 // ─────────────────────────────────────────
 Object.assign(window, {
   state, go, switchTab, logout, loadAccount, removeAccount,
@@ -705,7 +732,31 @@ Object.assign(window, {
 });
 
 // ─────────────────────────────────────────
-//  INIT
+//  INIT — Firestore에서 계정 목록 로드
 // ─────────────────────────────────────────
-state.drafts = [{ id:nid(), name:'', date:'2026-08-04', group:'변동지출', cat:'', amount:'', note:'' }];
-render();
+async function init() {
+  setLoading(true);
+  try {
+    const accounts = await fetchAccounts();
+    if (accounts.length === 0) {
+      // 최초 실행: 기본 계정 Firestore에 저장
+      const defaultAcct = state.accounts[0];
+      await saveAccount(defaultAcct);
+      await saveUserData(defaultAcct.id, {
+        txs:[], assets:[], budgets:{},
+        cats: DEF_CATS.slice(), groups: GROUPS.slice(),
+        profile: { name: defaultAcct.name, age:'' },
+        goal: { name:'목표 설정', target:'0' }
+      });
+    } else {
+      state.accounts = accounts;
+    }
+  } catch(e) {
+    console.warn('Firestore 초기화 실패 (오프라인?)', e);
+  }
+  setLoading(false);
+  state.drafts = [{ id:nid(), name:'', date:todayStr(), group:'변동지출', cat:'', amount:'', note:'' }];
+  render();
+}
+
+init();
