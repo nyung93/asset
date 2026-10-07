@@ -251,7 +251,13 @@ a{color:var(--blue)}
   .auth-wrap{width:min(520px,100%);margin:0 auto;padding:54px 36px 60px}
   .auth-title{font-size:30px}
   .auth-sub{font-size:13px}
+  #s-login,#s-signup,#s-find{min-height:100%}
+  #s-admin>div:first-child{padding:28px 34px 24px!important}
+  #s-admin>#admin-stats{padding:0 20px}
+  #s-admin>#admin-list{padding:22px 34px 40px!important;max-width:1100px}
   #s-landing{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:72px;align-items:center;padding:64px 9%;min-height:100%}
+  #s-landing:not(.active){display:none}
+  #s-landing.active{display:grid}
   .landing-hero{padding:0;justify-content:center}
   .landing-title{font-size:44px}
   .landing-sub{font-size:14px}
