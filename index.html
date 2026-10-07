@@ -12,6 +12,32 @@
 <div class="frame-wrap">
 <div class="phone" id="app">
 
+  <header class="web-header" aria-label="웹 상단 메뉴">
+    <button class="web-brand" type="button" onclick="webHome()"><span class="web-brand-icon">₩</span><span>가계부</span><span class="web-brand-caption">자산관리</span></button>
+    <div class="web-header-right"><span id="web-location">시작하기</span><span class="web-header-divider"></span><span id="web-user">방문자</span><button id="web-logout" class="web-logout" type="button" onclick="logout()">로그아웃</button></div>
+  </header>
+
+  <aside id="web-sidebar" class="web-sidebar" aria-label="주요 메뉴">
+    <div class="web-nav-label">WORKSPACE</div>
+    <button type="button" class="web-nav-item" data-web-nav="dash" onclick="goApp('dash')">▦ <span>대시보드</span></button>
+    <button type="button" class="web-nav-item web-nav-parent" data-web-nav="ledger" onclick="toggleWebLedger()" aria-expanded="true">≡ <span>가계부</span><span class="web-nav-chevron">⌄</span></button>
+    <div id="web-ledger-subnav" class="web-subnav">
+      <button type="button" class="web-nav-item web-nav-child" data-web-nav="ledger-summary" onclick="goApp('ledger')">월간 요약</button>
+      <button type="button" class="web-nav-item web-nav-child" data-web-nav="ledger-detail" onclick="go('ledger-detail')">원자료 내역</button>
+      <button type="button" class="web-nav-item web-nav-child web-nav-create" data-web-nav="input" onclick="goApp('input')">＋ 새 입력</button>
+    </div>
+    <button type="button" class="web-nav-item" data-web-nav="assets" onclick="goApp('assets')">◇ <span>자산 현황</span></button>
+    <div class="web-nav-label web-nav-label-spaced">ACCOUNT</div>
+    <button type="button" class="web-nav-item" data-web-nav="mypage" onclick="goApp('mypage')">⚙ <span>설정</span></button>
+    <div class="web-sidebar-footer"><span>현재 계정</span><strong id="web-sidebar-user">—</strong></div>
+  </aside>
+
+  <aside id="web-admin-sidebar" class="web-sidebar" aria-label="관리자 메뉴">
+    <div class="web-nav-label">ADMIN</div>
+    <div class="web-nav-item active">▦ <span>회원 관리</span></div>
+    <div class="web-sidebar-footer"><span>관리자 계정</span><strong>admin</strong></div>
+  </aside>
+
   <!-- Loading overlay -->
   <div id="loading-overlay" style="display:none;position:absolute;inset:0;background:rgba(255,255,255,.88);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:12px;border-radius:26px">
     <div class="spinner"></div>
@@ -50,6 +76,7 @@
 
     <!-- ── LOGIN ── -->
     <div id="s-login" class="screen">
+      <div class="web-auth-intro"><span class="web-auth-mark">₩</span><p class="web-eyebrow">PERSONAL FINANCE WORKSPACE</p><h1>돈의 흐름을<br>한눈에 관리하세요.</h1><p>월간 가계부부터 자산·부채, 예산 집행률까지 한 곳에서 확인할 수 있습니다.</p><ul><li>월별 수입과 지출 분석</li><li>계좌·자산 현황 관리</li><li>목표와 예산 집행률 확인</li></ul></div>
       <div class="auth-wrap">
         <div class="auth-back" onclick="go('landing')">‹ 메인</div>
         <div class="auth-title">로그인</div>
@@ -143,7 +170,7 @@
             <div style="font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.04em">관리자</div>
             <div style="font-size:22px;font-weight:700;letter-spacing:-.02em;margin-top:3px">회원 관리</div>
           </div>
-          <div onclick="go('landing')" style="font-size:11.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.16);padding:8px 12px;border-radius:999px;cursor:pointer">나가기</div>
+          <div onclick="logout()" style="font-size:11.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.16);padding:8px 12px;border-radius:999px;cursor:pointer">나가기</div>
         </div>
         <div id="admin-sub" style="font-size:11.5px;color:rgba(255,255,255,.65);margin-top:10px"></div>
         <div style="margin-top:14px;position:relative">
@@ -155,6 +182,7 @@
       </div>
       <div id="admin-stats" style="display:flex;gap:0;border-bottom:1px solid var(--line)"></div>
       <div id="admin-notice"></div>
+      <div id="admin-table" class="web-admin-table" aria-label="회원 목록"></div>
       <div id="admin-list" style="padding:12px 18px 28px;display:flex;flex-direction:column;gap:10px"></div>
     </div>
 
@@ -163,6 +191,8 @@
 
       <!-- DASHBOARD -->
       <div id="tab-dash">
+        <div class="web-page-head"><div><p class="web-eyebrow">OVERVIEW</p><h1>대시보드</h1><p>이번 달 재무 흐름을 한눈에 확인하세요.</p></div><button type="button" class="web-action web-action-secondary" onclick="goApp('input')">＋ 새 입력</button></div>
+        <div class="web-summary-row"><div class="web-summary-card"><span>순자산</span><strong id="w-net">—</strong><small>자산에서 부채를 제외한 금액</small></div><div class="web-summary-card"><span>이번 달 수입</span><strong id="w-income" class="positive">—</strong><small>월간 가계부 기준</small></div><div class="web-summary-card"><span>이번 달 지출</span><strong id="w-spend" class="negative">—</strong><small>월간 가계부 기준</small></div><div class="web-summary-card"><span>현금흐름</span><strong id="w-flow">—</strong><small>수입 − 지출</small></div></div>
         <div class="dash-header">
           <div class="dash-header-row">
             <div>
@@ -189,22 +219,24 @@
             <div id="d-prev-spend" class="kpi-prev"></div>
           </div>
         </div>
-        <div style="padding:18px 18px 0">
+        <div class="web-dashboard-assets" style="padding:18px 18px 0">
           <div class="section-hd"><div class="section-title">계좌·자산</div><div class="section-more" onclick="switchTab('assets')">전체 보기 ›</div></div>
           <div class="card" id="d-asset-list"></div>
         </div>
-        <div style="padding:18px 18px 0">
+        <div class="web-dashboard-groups" style="padding:18px 18px 0">
           <div class="section-title" style="margin-bottom:9px" id="d-group-title"></div>
           <div class="card" id="d-group-list" style="padding:6px 15px"></div>
         </div>
-        <div style="padding:18px 18px 24px">
+        <div class="web-dashboard-recent" style="padding:18px 18px 24px">
           <div class="section-hd"><div class="section-title">최근 입력</div></div>
+          <div id="web-recent-table" class="web-data-table"></div>
           <div class="card" id="d-recent-tx"></div>
         </div>
       </div>
 
       <!-- LEDGER -->
       <div id="tab-ledger" style="display:none">
+        <div class="web-page-head"><div><p class="web-eyebrow">LEDGER</p><h1>월간 가계부</h1><p>월별 수입·지출과 원자료를 관리합니다.</p></div><button type="button" class="web-action" onclick="goApp('input')">＋ 새 입력</button></div>
         <div class="ledger-header">
           <div class="ledger-controls">
             <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em">월간 가계부</div>
@@ -220,7 +252,7 @@
             <div class="ledger-sum-item"><div class="ls-lbl">잔액</div><div id="l-net" class="ls-val" style="color:var(--ink)">—</div></div>
           </div>
         </div>
-        <div style="padding:18px 18px 0">
+        <div class="web-ledger-chart" style="padding:18px 18px 0">
           <div class="card" style="padding:18px 16px">
             <div style="display:flex;align-items:center;gap:18px">
               <div id="l-donut" class="donut-wrap">
@@ -230,7 +262,7 @@
             </div>
           </div>
         </div>
-        <div style="padding:18px 18px 0">
+        <div class="web-ledger-groups" style="padding:18px 18px 0">
           <div class="section-title" style="margin-bottom:9px">대분류별 합계 · 전월 대비</div>
           <div id="l-groups"></div>
         </div>
@@ -246,6 +278,7 @@
               <span class="section-more" onclick="switchTab('input')">입력하기 ›</span>
             </div>
           </div>
+          <div id="web-ledger-table" class="web-data-table"></div>
           <div id="l-tx-list"></div>
           <div id="l-tx-pages" style="padding:0 0 4px"></div>
         </div>
@@ -253,6 +286,7 @@
 
       <!-- INPUT -->
       <div id="tab-input" style="display:none">
+        <div class="web-page-head"><div><p class="web-eyebrow">LEDGER / NEW</p><h1>새 입력</h1><p>거래 내역을 추가하면 월간 가계부에 반영됩니다.</p></div><div class="web-page-actions"><button type="button" class="web-action web-action-secondary" onclick="openBulkImport()">엑셀 일괄입력</button><button type="button" class="web-action" onclick="saveDrafts()">저장</button></div></div>
         <div class="input-header">
           <div>
             <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em">원자료 입력</div>
@@ -264,6 +298,7 @@
           </div>
         </div>
         <div style="padding:16px 18px 0" id="draft-list"></div>
+        <div id="web-draft-list" class="web-draft-list"></div>
         <div style="padding:16px 18px 24px">
           <button id="save-btn" onclick="saveDrafts()" class="btn-blue"></button>
           <div style="font-size:11px;color:var(--faint);text-align:center;margin-top:10px;line-height:1.5">저장하면 대분류·카테고리 합계와 자산현황에 즉시 반영됩니다.</div>
@@ -272,12 +307,14 @@
 
       <!-- ASSETS -->
       <div id="tab-assets" style="display:none">
+        <div class="web-page-head"><div><p class="web-eyebrow">PORTFOLIO</p><h1>자산 현황</h1><p>계좌와 자산별 잔액을 확인하고 관리하세요.</p></div></div>
         <div class="assets-header">
           <div style="font-size:19px;font-weight:600;letter-spacing:-.01em">자산현황</div>
           <div class="assets-total-lbl">유동자산 합계</div>
           <div id="a-total" class="assets-total-val">—</div>
           <div id="a-sub" class="assets-sub"></div>
         </div>
+        <div id="web-assets-table" class="web-data-table"></div>
         <div style="padding:16px 18px 0" id="asset-group-list"></div>
         <div style="padding:16px 18px 24px">
           <div class="add-asset-box">
@@ -294,6 +331,7 @@
 
       <!-- MYPAGE -->
       <div id="tab-mypage" style="display:none">
+        <div class="web-page-head"><div><p class="web-eyebrow">ACCOUNT</p><h1>설정</h1><p>프로필, 예산, 카테고리와 목표를 관리하세요.</p></div></div>
         <div class="my-header">
           <div style="font-size:20px;font-weight:700;color:var(--blue);letter-spacing:-.02em;margin-bottom:16px">마이페이지</div>
           <div class="my-profile-row">

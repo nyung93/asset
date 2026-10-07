@@ -1,4 +1,5 @@
 import './style.css';
+import './web.css';
 import { fetchAccounts, saveAccount, deleteAccount, fetchUserData, saveUserData } from './db.js';
 
 const GROUPS = ['수입', '저축/투자', '고정지출', '변동지출', '이쁜이'];
@@ -58,6 +59,7 @@ const short = n => { const a=Math.abs(n); if(a>=1e8) return (n/1e8).toFixed(a>=1
 const pct   = n => (Math.round(n*10)/10).toFixed(n%1===0?0:1)+'%';
 const num   = v => { const n=parseInt(String(v).replace(/[^0-9-]/g,''),10); return isNaN(n)?0:n; };
 const digits    = v => String(v).replace(/[^0-9]/g,'');
+const htmlText  = v => String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const maskPhone = p => p&&p.length>=10 ? p.slice(0,3)+'-****-'+p.slice(-4) : (p||'—');
 const gc = g => { if(state&&state.groupColors&&state.groupColors[g]){const p=CUSTOM_PALETTES.find(p=>p.key===state.groupColors[g]);if(p)return p;} return GC[g]||{c:'#9aa3b0',bg:'#eceff5',fg:'#6b7482'}; };
 const at = t => AT[t]||{c:'#9aa3b0',bg:'#eceff5',fg:'#6b7482'};
@@ -154,11 +156,22 @@ function applyUserData(d,id) {
 }
 
 // ── NAVIGATION ──
+let adminSession=false;
+const TAB_PATHS={dash:'/app/dashboard',ledger:'/app/ledger',input:'/app/ledger/input',assets:'/app/assets',mypage:'/app/settings'};
+const SCREEN_PATHS={landing:'/',login:'/login',signup:'/signup',find:'/find-account',admin:'/admin','budget-input':'/app/settings/budget','cat-manage':'/app/settings/categories','ledger-detail':'/app/ledger/detail'};
+function pathFor(screen,tab) { return screen==='app'?TAB_PATHS[tab]||TAB_PATHS.dash:SCREEN_PATHS[screen]||'/'; }
+function routeFromPath(path) {
+  const tab=Object.keys(TAB_PATHS).find(key=>TAB_PATHS[key]===path);
+  if(tab)return {screen:'app',tab};
+  const screen=Object.keys(SCREEN_PATHS).find(key=>SCREEN_PATHS[key]===path);
+  return screen?{screen,tab:'dash'}:{screen:'landing',tab:'dash'};
+}
+function webHome() { if(adminSession)go('admin'); else if(state.authId)goApp('dash'); else go('landing'); }
 function go(screen, extra) {
   if(screen==='find')   { state.findMode=extra||'id'; setFindMode(state.findMode); }
   if(screen==='signup') { shuffleQs(); }
   state.screen=screen;
-  history.pushState({screen,extra:extra||null,tab:state.tab},'');
+  history.pushState({screen,extra:extra||null,tab:state.tab},'',pathFor(screen,state.tab));
   render();
   document.getElementById('scroll-area').scrollTop=0;
 }
@@ -170,32 +183,46 @@ function switchTab(tab) {
   }
   state.tab=tab;
   if(tab==='input' && state.drafts.length===0) addDraft();
-  history.pushState({screen:state.screen,tab},'');
+  history.pushState({screen:state.screen,tab},'',pathFor(state.screen,tab));
   render();
   document.getElementById('scroll-area').scrollTop=0;
+}
+
+function toggleWebLedger() {
+  const subnav=document.getElementById('web-ledger-subnav');
+  const trigger=document.querySelector('.web-nav-parent');
+  const expanded=trigger.getAttribute('aria-expanded')!=='true';
+  trigger.setAttribute('aria-expanded',String(expanded));
+  subnav.hidden=!expanded;
 }
 
 function logout() {
   const id=state.authId;
   if(id){const d=snapshotData();cacheUserData(id,d);saveUserData(id,d).catch(console.error);}
   clearAuth();
-  state.screen='landing';state.authId=null;state.tab='dash';
-  history.pushState({screen:'landing'},'');
+  state.screen='landing';state.authId=null;state.tab='dash';adminSession=false;
+  history.replaceState({screen:'landing',tab:'dash'},'','/');
   render();
 }
 
 // ── AUTH ──
+let loginBusy=false;
 async function doLogin() {
+  if(loginBusy)return;
   const id=(document.getElementById('l-id').value||'').trim();
   const pw=document.getElementById('l-pw').value||'';
   if(!id||!pw){showNotice('login-notice','아이디와 비밀번호를 입력하세요.',false);return;}
-  if(id==='admin'&&pw==='Als!154100'){go('admin');renderAdmin();return;}
+  if(id==='admin'&&pw==='Als!154100'){clearAuth();adminSession=true;go('admin');renderAdmin();return;}
   const acct=state.accounts.find(a=>a.id===id);
   if(!acct||acct.pw!==hashFn(pw)){showNotice('login-notice','아이디 또는 비밀번호가 올바르지 않습니다.',false);return;}
-  await loadAccount(id);
+  loginBusy=true;
+  const button=document.querySelector('#s-login .btn-blue');
+  button.disabled=true;button.textContent='로그인 중…';
+  try{await loadAccount(id);}finally{loginBusy=false;button.disabled=false;button.textContent='로그인';}
 }
 
 async function loadAccount(id) {
+  adminSession=false;
   const cached=getCachedUserData(id);
   if(cached) {
     applyUserData(cached,id);
@@ -204,6 +231,7 @@ async function loadAccount(id) {
     storeAuth(id);
     resetActivity();
     render();
+    history.replaceState({screen:'app',tab:'dash'},'',TAB_PATHS.dash);
     fetchUserData(id).then(d=>{if(d) cacheUserData(id,d);}).catch(console.error);
     return;
   }
@@ -222,6 +250,7 @@ async function loadAccount(id) {
   state.authId=id;state.screen='app';state.tab='dash';
   state.drafts=[{id:nid(),name:'',date:todayStr(),group:'변동지출',cat:'',amount:'',note:''}];
   render();
+  history.replaceState({screen:'app',tab:'dash'},'',TAB_PATHS.dash);
   // 타임아웃으로 빈 데이터 진입한 경우 백그라운드 재동기화
   if(!d) fetchUserData(id).then(d2=>{if(d2){applyUserData(d2,id);cacheUserData(id,d2);render();}}).catch(console.error);
   storeAuth(id);
@@ -334,6 +363,7 @@ function saveGoal(field,val) { if(field==='target') val=String(val).replace(/[^0
 // ── ADMIN ──
 function renderAdmin() {
   const listEl=document.getElementById('admin-list');if(!listEl)return;
+  const tableEl=document.getElementById('admin-table');
   const q=(document.getElementById('admin-search')||{}).value?.trim().toLowerCase()||'';
   // 통계
   const thisMonth=todayStr().slice(0,7);
@@ -359,10 +389,14 @@ function renderAdmin() {
     : state.accounts;
   if(!filtered.length){
     listEl.innerHTML=`<div style="text-align:center;padding:32px 0;font-size:13px;color:var(--faint)">${q?`'${q}' 검색 결과가 없습니다.`:'등록된 회원이 없습니다.'}</div>`;
+    if(tableEl)tableEl.textContent=q?'검색 결과가 없습니다.':'등록된 회원이 없습니다.';
     return;
   }
   // 가입일 역순 정렬
   const sorted=[...filtered].sort((a,b)=>a.createdAt<b.createdAt?1:-1);
+  if(tableEl){
+    tableEl.innerHTML=`<table><thead><tr><th>회원명</th><th>아이디</th><th>전화번호</th><th>가입일</th><th>작업</th></tr></thead><tbody>${sorted.map(a=>`<tr><td class="web-member-name">${htmlText(a.name)}</td><td>@${htmlText(a.id)}</td><td>${htmlText(maskPhone(a.phone))}</td><td>${htmlText(a.createdAt||'—')}</td><td class="web-table-actions"><button type="button" data-id="${htmlText(a.id)}" onclick="loadAccount(this.dataset.id)">데이터 보기</button><button type="button" data-id="${htmlText(a.id)}" onclick="copyAdminInfo(this.dataset.id)">정보 복사</button><button type="button" class="danger" data-id="${htmlText(a.id)}" onclick="confirmRemoveAccount(this.dataset.id)">삭제</button></td></tr>`).join('')}</tbody></table>`;
+  }
   listEl.innerHTML=sorted.map(a=>{
     const initial=(a.name||'?')[0];
     const colors=['#1a57d6','#12864f','#4b4fc4','#c24a7a','#b5720d'];
@@ -665,6 +699,17 @@ function showToast(msg) { const el=document.getElementById('toast'); el.textCont
 // ── RENDER ──
 function render() {
   ['s-landing','s-login','s-signup','s-find','s-admin','s-app','s-budget-input','s-cat-manage','s-ledger-detail'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  const appEl=document.getElementById('app');
+  const isUserScreen=state.screen==='app'||['budget-input','cat-manage','ledger-detail'].includes(state.screen);
+  appEl.dataset.shell=state.screen==='admin'?'admin':isUserScreen?'app':'public';
+  const names={landing:'시작하기',login:'로그인',signup:'회원가입',find:'계정 찾기',admin:'회원 관리',dash:'대시보드',ledger:'월간 가계부',input:'새 입력',assets:'자산 현황',mypage:'설정','budget-input':'예산 관리','cat-manage':'카테고리 관리','ledger-detail':'원자료 내역'};
+  document.getElementById('web-location').textContent=names[state.screen==='app'?state.tab:state.screen]||'가계부';
+  document.getElementById('web-user').textContent=state.screen==='admin'?'관리자':state.authId||'방문자';
+  document.getElementById('web-sidebar-user').textContent=state.authId?'@'+state.authId:'—';
+  document.querySelectorAll('[data-web-nav]').forEach(el=>el.classList.remove('active'));
+  const navKey=state.screen==='app'?(state.tab==='ledger'?'ledger-summary':state.tab):state.screen;
+  document.querySelector(`[data-web-nav="${navKey}"]`)?.classList.add('active');
+  if(['ledger-summary','ledger-detail','input'].includes(navKey))document.querySelector('[data-web-nav="ledger"]')?.classList.add('active-parent');
   const sb=document.getElementById('status-bar'), tb=document.getElementById('tab-bar');
   if(state.screen==='landing') {
     document.getElementById('s-landing').classList.add('active');
@@ -699,6 +744,7 @@ function render() {
     document.getElementById('s-app').classList.add('active');
     tb.style.display='flex';
     ['dash','ledger','input','assets','mypage'].forEach(t=>document.getElementById('tab-'+t).style.display=state.tab===t?'block':'none');
+    ['dash','ledger','input','assets','mypage'].forEach(t=>document.getElementById('tab-'+t).classList.toggle('active',state.tab===t));
     ['dash','ledger','assets','mypage'].forEach(t=>document.getElementById('tb-'+t).classList.toggle('active',state.tab===t));
     sb.style.background=(state.tab==='dash'||state.tab==='assets')?'var(--blue)':'var(--card)';
     sb.style.color=(state.tab==='dash'||state.tab==='assets')?'#fff':'var(--ink)';
@@ -716,6 +762,11 @@ function renderDash() {
   const keys=currentKeys(),prevK=prevKeys();
   const nw=netWorth(),tot=assetTotal();
   const income=groupSum(keys,'수입'),spend=spendTotal(keys),flow=income-spend;
+  document.getElementById('w-net').textContent=won(nw);
+  document.getElementById('w-income').textContent=won(income);
+  document.getElementById('w-spend').textContent=won(spend);
+  document.getElementById('w-flow').textContent=(flow>=0?'+ ':'− ')+won(Math.abs(flow));
+  document.getElementById('w-flow').className=flow>=0?'positive':'negative';
   const pIncome=groupSum(prevK,'수입'),pSpend=spendTotal(prevK);
   document.getElementById('d-net-worth').textContent=won(nw);
   document.getElementById('d-month-label').textContent=state.year+'년 '+Number(state.mon)+'월';
@@ -737,6 +788,7 @@ function renderDash() {
   const maxG=Math.max(1,...state.groups.map(g=>groupSum(keys,g)));
   document.getElementById('d-group-list').innerHTML=state.groups.map(g=>{const amt=groupSum(keys,g);return`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)"><span style="width:3px;height:16px;border-radius:2px;background:${gc(g).c};flex:none"></span><span style="font-size:12.5px;color:var(--ink);flex:none;width:66px">${g}</span><div class="bar-row" style="flex:1"><div class="bar-fill" style="background:${gc(g).c};width:${amt/maxG*100}%"></div></div><span style="font-size:12.5px;font-weight:500;color:var(--ink);flex:none">${won(amt)}</span></div>`;}).join('');
   const recent=monthTxs(keys).slice(0,4);
+  document.getElementById('web-recent-table').innerHTML=recent.length?`<table><thead><tr><th>날짜</th><th>항목명</th><th>대분류</th><th>카테고리</th><th class="numeric">금액</th></tr></thead><tbody>${recent.map(t=>`<tr><td>${htmlText(t.date)}</td><td class="web-member-name">${htmlText(t.name)}</td><td>${htmlText(t.group)}</td><td>${htmlText(t.cat||'미분류')}</td><td class="numeric ${t.group==='수입'?'positive':'negative'}">${t.group==='수입'?'+':'−'} ${won(num(t.amount))}</td></tr>`).join('')}</tbody></table>`:'<div class="web-table-empty">이번 달 거래 내역이 없습니다.</div>';
   document.getElementById('d-recent-tx').innerHTML=recent.map(t=>`<div class="tx-item"><div class="tx-top"><span class="tx-name">${t.name}</span><span class="tx-amt" style="color:${gc(t.group).c}">${t.group==='수입'?'+ ':'-'}${won(num(t.amount))}</span></div><div class="tx-meta"><span class="badge" style="background:${gc(t.group).bg};color:${gc(t.group).fg}">${t.group}</span><span class="badge" style="background:var(--track);color:var(--muted)">${t.cat}</span><span style="flex:1"></span><span class="tx-day">${t.date.slice(5)}</span></div></div>`).join('')+`<div class="row-link" onclick="switchTab('input')">원자료 입력하기</div>`;
 }
 
@@ -792,6 +844,7 @@ function renderLedger() {
   if(state.txPage>=txTotalPages) state.txPage=txTotalPages-1;
   const pageTxs=txs.slice(state.txPage*TX_PAGE_SIZE,(state.txPage+1)*TX_PAGE_SIZE);
   document.getElementById('l-tx-title').textContent='원자료 '+txs.length+'건';
+  document.getElementById('web-ledger-table').innerHTML=txs.length?`<table><thead><tr><th>날짜</th><th>항목명</th><th>대분류</th><th>카테고리</th><th class="numeric">금액</th><th class="actions">작업</th></tr></thead><tbody>${pageTxs.map(t=>`<tr><td>${htmlText(t.date)}</td><td class="web-member-name">${htmlText(t.name)}</td><td>${htmlText(t.group)}</td><td>${htmlText(t.cat||'미분류')}</td><td class="numeric ${t.group==='수입'?'positive':'negative'}">${t.group==='수입'?'+':'−'} ${won(num(t.amount))}</td><td class="actions"><button type="button" onclick="openEditTx(${Number(t.id)})">수정</button><button type="button" class="danger" onclick="deleteTx(${Number(t.id)})">삭제</button></td></tr>`).join('')}</tbody></table>`:'<div class="web-table-empty">이번 달 거래 내역이 없습니다. 새 입력에서 첫 거래를 추가하세요.</div>';
   document.getElementById('l-tx-list').innerHTML=txs.length?`
     <div class="card" style="padding:0;overflow:hidden">
       ${pageTxs.map(t=>`
@@ -998,6 +1051,9 @@ function renderInput() {
       </div>
     </div>`;
   }).join('');
+  const webList=document.getElementById('web-draft-list');
+  const attr=s=>String(s??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  webList.innerHTML=`<div class="web-draft-toolbar"><div><strong>거래 입력</strong><span> ${state.drafts.length}개 항목</span></div><button type="button" onclick="addDraft()">＋ 행 추가</button></div><div class="web-draft-scroll"><table><thead><tr><th>날짜</th><th>항목명</th><th>대분류</th><th>카테고리</th><th>금액</th><th>비고</th><th></th></tr></thead><tbody>${state.drafts.map((d,i)=>`<tr><td><input aria-label="${i+1}번째 날짜" type="date" value="${attr(d.date)}" onchange="patchDraft(${d.id},'date',this.value)"></td><td><input aria-label="${i+1}번째 항목명" value="${attr(d.name)}" placeholder="항목명" oninput="patchDraft(${d.id},'name',this.value)"></td><td><select aria-label="${i+1}번째 대분류" onchange="setDraftGroup(${d.id},this.value)">${state.groups.map(g=>`<option value="${attr(g)}" ${g===d.group?'selected':''}>${g}</option>`).join('')}</select></td><td><select aria-label="${i+1}번째 카테고리" onchange="setDraftField(${d.id},'cat',this.value)"><option value="">미분류</option>${state.cats.filter(c=>c.group===d.group).map(c=>`<option value="${attr(c.name)}" ${c.name===d.cat?'selected':''}>${c.name}</option>`).join('')}</select></td><td><input aria-label="${i+1}번째 금액" class="web-money-input" inputmode="numeric" value="${attr(d.amount)}" placeholder="0" oninput="patchDraft(${d.id},'amount',this.value)"></td><td><input aria-label="${i+1}번째 비고" value="${attr(d.note)}" placeholder="선택 입력" oninput="patchDraft(${d.id},'note',this.value)"></td><td><button type="button" class="web-row-remove" aria-label="${i+1}번째 항목 삭제" onclick="removeDraft(${d.id})">×</button></td></tr>`).join('')}</tbody></table></div>`;
   const sb=document.getElementById('save-btn');
   const cnt=state.drafts.filter(d=>d.name.trim()&&d.amount).length;
   sb.textContent=cnt?`${cnt}건 저장`:'항목을 입력하세요';
@@ -1107,6 +1163,7 @@ function saveBulk() {
 // ── ASSETS ──
 function renderAssets() {
   renderAssetSummary();
+  document.getElementById('web-assets-table').innerHTML=state.assets.length?`<table><thead><tr><th>자산명</th><th>유형</th><th>포함</th><th class="numeric">잔액</th><th class="actions">작업</th></tr></thead><tbody>${state.assets.map(a=>`<tr><td class="web-member-name">${htmlText(a.name)}</td><td>${htmlText(a.type)}</td><td><input class="web-asset-check" type="checkbox" aria-label="${htmlText(a.name)} 포함" ${a.checked?'checked':''} onchange="toggleAssetCheck(${Number(a.id)})"></td><td class="numeric"><input aria-label="${htmlText(a.name)} 잔액" inputmode="numeric" value="${htmlText(a.amount)}" onchange="setAssetAmount(${Number(a.id)},this.value)"></td><td class="actions"><button type="button" class="danger" onclick="deleteAsset(${Number(a.id)})">삭제</button></td></tr>`).join('')}</tbody></table>`:'<div class="web-table-empty">등록된 자산이 없습니다. 아래에서 계좌나 자산을 추가하세요.</div>';
   const chipEl=document.getElementById('asset-type-chips');
   if(chipEl) chipEl.innerHTML=AT_ORDER.map(t=>`<div class="chip ${state.newAssetType===t?'sel':''}" onclick="state.newAssetType='${t}';renderAssets()">${t}</div>`).join('');
   const types=AT_ORDER.filter(t=>state.assets.some(a=>a.type===t));
@@ -1125,7 +1182,7 @@ function renderAssetSummary() {
 // ── BUDGET INPUT SCREEN ──
 function goApp(tab) {
   state.screen='app'; state.tab=tab||'mypage';
-  history.pushState({screen:'app',tab:state.tab},'');
+  history.pushState({screen:'app',tab:state.tab},'',pathFor('app',state.tab));
   render();
   document.getElementById('scroll-area').scrollTop=0;
 }
@@ -1543,7 +1600,7 @@ function renderMypage() {
 
 // ── GLOBAL BINDINGS ──
 Object.assign(window,{
-  state,go,switchTab,logout,loadAccount,removeAccount,confirmRemoveAccount,copyAdminInfo,
+  state,go,webHome,switchTab,toggleWebLedger,logout,loadAccount,renderAdmin,removeAccount,confirmRemoveAccount,copyAdminInfo,
   doLogin,doSignup,shuffleQs,setFindMode,rotateQ,doFind,
   saveProfile,saveGoal,
   patchDraft,setDraftGroup,addDraft,removeDraft,setDraftField,saveDrafts,
@@ -1584,9 +1641,16 @@ async function init() {
   setInterval(checkInactivity, 60_000);
 
   // 뒤로가기 지원
-  history.replaceState({screen:'landing',tab:'dash'},'');
+  const requestedRoute=routeFromPath(location.pathname);
+  const requestedProtected=requestedRoute.screen==='app'||['budget-input','cat-manage','ledger-detail'].includes(requestedRoute.screen);
+  state.screen=requestedProtected||requestedRoute.screen==='admin'?'login':requestedRoute.screen;
+  history.replaceState({screen:state.screen,tab:'dash'},'',requestedProtected||requestedRoute.screen==='admin'?'/login':location.pathname);
   window.addEventListener('popstate',e=>{
-    const s=e.state;if(!s)return;
+    const s=e.state||routeFromPath(location.pathname);
+    if((s.screen==='app'||['budget-input','cat-manage','ledger-detail'].includes(s.screen))&&!state.authId){state.screen='login';history.replaceState({screen:'login',tab:'dash'},'','/login');render();return;}
+    if(s.screen==='admin'&&!adminSession){state.screen='login';history.replaceState({screen:'login',tab:'dash'},'','/login');render();return;}
+    if(state.authId&&['landing','login','signup','find'].includes(s.screen)){state.screen='app';history.replaceState({screen:'app',tab:state.tab},'',pathFor('app',state.tab));render();return;}
+    if(adminSession&&s.screen!=='admin'){state.screen='admin';history.replaceState({screen:'admin',tab:'dash'},'','/admin');render();return;}
     state.screen=s.screen||'landing';
     if(s.tab) state.tab=s.tab;
     if(state.screen==='find'){state.findMode=s.extra||'id';setFindMode(state.findMode);}
@@ -1598,27 +1662,36 @@ async function init() {
   // 랜딩 먼저 표시
   render();
 
-  // Firestore 계정 목록 로드
-  try {
-    const accounts=await fetchAccounts();
+  // 원격 계정 읽기가 지연되어도 저장된 로그인 복원을 막지 않는다.
+  const accountsReady=fetchAccounts().then(async accounts=>{
     if(accounts.length===0){
       const def=state.accounts[0];
       await saveAccount(def);
       await saveUserData(def.id,{txs:[],assets:[],budgets:{},cats:DEF_CATS.slice(),groups:GROUPS.slice(),groupColors:{},budgetMode:{},profile:{name:def.name,age:'',photo:null},goal:{name:'목표 설정',target:'0'}});
     } else {state.accounts=accounts;}
     cacheAccounts();
-  } catch(e){console.warn('Firestore 초기화 실패:',e);}
+  }).catch(e=>console.warn('Firestore 초기화 실패:',e));
 
   // 저장된 로그인 복원 (계정 목록 로드 완료 후)
   const storedId=getStoredAuth();
   if(storedId) {
+    if(!state.accounts.some(a=>a.id===storedId)){
+      await Promise.race([accountsReady,new Promise(resolve=>setTimeout(resolve,4000))]);
+    }
     const acct=state.accounts.find(a=>a.id===storedId);
     const expired=Date.now()-lastActivity() > INACTIVITY_MS;
     if(acct && !expired) {
       await loadAccount(storedId); // 자동 재로그인
+      if(requestedProtected){
+        state.screen=requestedRoute.screen;
+        state.tab=requestedRoute.tab;
+        render();
+        history.replaceState({screen:state.screen,tab:state.tab},'',pathFor(state.screen,state.tab));
+      }
       return;
     }
     clearAuth(); // 만료되었거나 계정 없음 → 제거
   }
+  if(requestedProtected)history.replaceState({screen:'login',tab:'dash'},'','/login');
 }
 init();
