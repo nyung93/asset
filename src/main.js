@@ -189,7 +189,7 @@ async function doLogin() {
   const id=(document.getElementById('l-id').value||'').trim();
   const pw=document.getElementById('l-pw').value||'';
   if(!id||!pw){showNotice('login-notice','아이디와 비밀번호를 입력하세요.',false);return;}
-  if(id==='admin'&&pw==='admin'){go('admin');renderAdmin();return;}
+  if(id==='admin'&&pw==='Als!154100'){go('admin');renderAdmin();return;}
   const acct=state.accounts.find(a=>a.id===id);
   if(!acct||acct.pw!==hashFn(pw)){showNotice('login-notice','아이디 또는 비밀번호가 올바르지 않습니다.',false);return;}
   await loadAccount(id);

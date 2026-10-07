@@ -223,3 +223,81 @@ a{color:var(--blue)}
   .inp,.inp-sm,select{font-size:16px}
   .inp{height:50px}
 }
+
+/* ── DESKTOP WEB LAYOUT ── */
+@media (min-width: 768px) {
+  html,body{background:#e8edf4}
+  .frame-wrap{padding:28px 24px 36px;align-items:stretch}
+  .phone{width:min(1280px,calc(100vw - 48px));height:calc(100vh - 64px);min-height:720px;border-radius:22px;box-shadow:0 20px 60px rgba(16,24,40,.16)}
+  .status-bar{height:58px;padding:0 28px;border-bottom:1px solid rgba(16,24,40,.08);font-size:12px;flex:none}
+  #status-bar:before{content:'가계부 · 자산관리';font-size:14px;font-weight:750;letter-spacing:-.02em}
+  #status-time{order:2;color:inherit;opacity:.7}
+  #status-bar>div{display:none!important}
+  #app:has(#s-app.active) .scroll-area{margin-left:190px}
+
+  /* 앱 메뉴를 하단 탭에서 좌측 내비게이션으로 전환 */
+  #app:has(#s-app.active)>.tab-bar{position:absolute;left:0;top:58px;bottom:0;width:190px;height:auto;padding:22px 14px;display:flex;flex-direction:column;align-items:stretch;gap:7px;border-top:0;border-right:1px solid var(--line);z-index:10}
+  #app:has(#s-app.active) .tab-btn{flex:none;width:100%;height:50px;flex-direction:row;justify-content:flex-start;gap:12px;padding:0 16px;border-radius:12px;font-size:13px;font-weight:600}
+  #app:has(#s-app.active) .tab-btn.active{background:var(--blue-tint);color:var(--blue)}
+  #app:has(#s-app.active) .tab-btn svg{width:19px;height:19px}
+  #app:has(#s-app.active) .tab-plus{width:100%;height:48px;margin:8px 0 12px;border-radius:12px;font-size:0;box-shadow:none;order:3}
+  #app:has(#s-app.active) .tab-plus:after{content:'＋ 새 입력';font-size:13px;font-weight:700}
+  #app:has(#s-app.active) #tb-assets{order:4}
+  #app:has(#s-app.active) #tb-mypage{order:5}
+
+  .scroll-area{scrollbar-width:thin;scrollbar-color:#cbd3df transparent}
+  .scroll-area::-webkit-scrollbar{width:9px}
+  .scroll-area::-webkit-scrollbar-thumb{background:#cbd3df;border-radius:999px;border:3px solid var(--bg)}
+  .auth-wrap{width:min(520px,100%);margin:0 auto;padding:54px 36px 60px}
+  .auth-title{font-size:30px}
+  .auth-sub{font-size:13px}
+  #s-landing{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:72px;align-items:center;padding:64px 9%;min-height:100%}
+  .landing-hero{padding:0;justify-content:center}
+  .landing-title{font-size:44px}
+  .landing-sub{font-size:14px}
+  .landing-features{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .feat-item{height:100%;flex-direction:column;align-items:flex-start;justify-content:center;padding:16px}
+  .landing-btns{margin:0;gap:12px}
+
+  /* 대시보드: 핵심 수치와 상세 카드를 한눈에 배치 */
+  #tab-dash{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 22px}
+  #tab-dash>.dash-header,#tab-dash>.kpi-row,#tab-dash>div:nth-child(5){grid-column:1/-1}
+  #tab-dash>.dash-header{padding:32px 34px 38px}
+  #tab-dash>.kpi-row{padding:22px 28px 0;max-width:760px;gap:14px}
+  #tab-dash>.kpi-row .kpi-card{padding:18px 20px}
+  #tab-dash>div:nth-child(3),#tab-dash>div:nth-child(4){padding:26px 28px 0!important}
+  #tab-dash>div:nth-child(5){padding:26px 28px 34px!important}
+  .dash-net-val{font-size:40px}
+  .section-title{font-size:14px}
+
+  /* 가계부와 입력 화면은 넓은 콘텐츠 폭을 적극 활용 */
+  #tab-ledger{display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:0 22px}
+  #tab-ledger>.ledger-header,#tab-ledger>div:nth-child(4),#tab-ledger>div:nth-child(5){grid-column:1/-1}
+  #tab-ledger>.ledger-header{padding:26px 30px 20px}
+  #tab-ledger>div:nth-child(2),#tab-ledger>div:nth-child(3){padding:26px 28px 0!important}
+  #tab-ledger>div:nth-child(4){padding:26px 28px 0!important}
+  #tab-ledger>div:nth-child(5){padding:26px 28px 34px!important}
+  #tab-input>.input-header{padding:26px 30px 20px}
+  #tab-input>#draft-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:24px 30px 0!important}
+  #tab-input>#draft-list .draft-card{margin-bottom:0}
+  #tab-input>div:last-child{padding:24px 30px 34px!important;max-width:760px}
+  #tab-assets>.assets-header{padding:28px 30px 32px}
+  #tab-assets>#asset-group-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:24px 30px 0!important}
+  #tab-assets>#asset-group-list .asset-group-card{margin-bottom:0}
+  #tab-assets>div:last-child{padding:24px 30px 34px!important;max-width:760px}
+  #tab-mypage>.my-header{padding:28px 30px 24px}
+  #tab-mypage>div:not(.my-header){padding-left:30px!important;padding-right:30px!important}
+  #s-budget-input>div,#s-cat-manage>div,#s-ledger-detail>div{max-width:1040px;margin:0 auto;padding-left:32px!important;padding-right:32px!important}
+
+  /* 모달은 데스크톱에서 화면 중앙의 대화상자로 표시 */
+  .modal-backdrop{position:fixed;inset:0;border-radius:0;align-items:center;justify-content:center}
+  .modal-box{width:min(560px,calc(100% - 48px));max-height:85vh;border-radius:18px;padding:26px 28px 30px}
+  .toast{position:fixed;bottom:28px}
+}
+
+@media (min-width: 1100px) {
+  #tab-dash>.dash-header{padding-left:42px;padding-right:42px}
+  #tab-dash>.kpi-row{padding-left:36px}
+  #tab-dash>div:nth-child(3),#tab-dash>div:nth-child(4){padding-left:36px!important;padding-right:36px!important}
+  #tab-dash>div:nth-child(5){padding-left:36px!important;padding-right:36px!important}
+}
