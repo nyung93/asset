@@ -48,15 +48,15 @@ test('first screen gates the app and validates signup fields',async({page})=>{
 });
 
 test('login explains missing account storage instead of appearing unresponsive',async({page})=>{
-  test.skip(!!loadEnv('development',process.cwd(),['DATABASE_URL']).DATABASE_URL, 'Requires the local account API without PostgreSQL');
+  const env=loadEnv('development',process.cwd(),['FIREBASE_PROJECT_ID','FIREBASE_PRIVATE_KEY','GOOGLE_APPLICATION_CREDENTIALS']);
+  test.skip(!!env.FIREBASE_PROJECT_ID && !!(env.FIREBASE_PRIVATE_KEY || env.GOOGLE_APPLICATION_CREDENTIALS), 'Requires the local account API without Firebase credentials');
   await page.goto('/');
-  await expect(page.getByRole('status')).toContainText('데이터베이스 연결을 준비하고 있어요.');
+  await expect(page.getByRole('status')).toContainText('Firebase 연결을 준비하고 있어요.');
   await page.getByLabel('아이디',{exact:true}).fill('test1');
   await page.getByLabel('비밀번호',{exact:true}).fill('TestPass!1');
   const login=page.getByRole('button',{name:'로그인하고 시작하기'});
   await login.click();
-  await expect(page.getByRole('alert')).toContainText('로그인 요청을 확인했지만 데이터베이스 설정이 완료되지 않았어요.');
-  await expect(page.getByRole('alert')).toContainText('테스트 계정은 DB 연결 후 생성해야 해요.');
+  await expect(page.getByRole('alert')).toContainText('Firebase 연결이 아직 완료되지 않았어요.');
   await expect(login).toBeEnabled();
   await expect(page.locator('.bottom-nav')).toHaveCount(0);
 });

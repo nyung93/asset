@@ -1,10 +1,10 @@
 # 부자할미 타이쿤
 
 회원가입·로그인, 계정별 가계부 저장, 마이페이지, 관리자 대시보드 설정은
-[계정·관리자 기능 설정](docs/account-setup.md)을 참고하세요. 배포 시 PostgreSQL과
-서버 전용 환경 변수 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`가 필요합니다.
+[계정·관리자 기능 설정](docs/account-setup.md)을 참고하세요. 배포 시 Cloud Firestore와
+서버 전용 Firebase 서비스 계정 정보, `FIELD_ENCRYPTION_KEY`가 필요합니다.
 
-React + Vite + TypeScript / Tailwind CSS / Lucide / Zustand / PostgreSQL.
+React + Vite + TypeScript / Tailwind CSS / Lucide / Zustand / Cloud Firestore.
 
 ```sh
 npm install
@@ -41,7 +41,7 @@ npm run test:e2e:auth  # 로그인·마이페이지·관리자 화면 검증
 
 레벨과 집은 누적 XP에 따라 상승합니다. 아래 Phase 4의 구간을 사용하며 기존 저장 데이터도 누적 XP로 이전합니다.
 
-Firebase 전환 시 `AppData`를 repository의 읽기/쓰기 스냅샷으로 사용하고, actions와 원격 동기화 계층을 분리할 수 있습니다. 로그인한 계정의 데이터는 PostgreSQL에 암호화해 저장합니다. 서버 연결이 없으면 저장되지 않으며, 화면에 저장 실패 안내가 표시됩니다. LocalStorage는 이전 버전 데이터 가져오기와 격리된 테스트에서만 사용합니다.
+로그인한 계정의 `AppData`는 Cloud Firestore에 암호화해 저장합니다. 서버 연결이 없으면 저장되지 않으며, 화면에 저장 실패 안내가 표시됩니다. LocalStorage는 이전 버전 데이터 가져오기와 격리된 테스트에서만 사용합니다.
 
 
 ## Phase 3 투자 포트폴리오

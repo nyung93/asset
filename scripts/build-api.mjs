@@ -7,6 +7,6 @@ await build({
   platform:'node',
   format:'esm',
   target:'node22',
-  external:['pg'],
+  external:['firebase-admin/*'],
   logLevel:'info',
 });

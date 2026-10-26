@@ -29,14 +29,14 @@ test('password requirements and one-way scrypt verification',async()=>{
   assert.equal(await verifyPassword('Wrong!Password',hash),false);
 });
 
-test('API fails closed without database and rejects cross-origin mutations',async()=>{
+test('API fails closed without Firebase credentials and rejects cross-origin mutations',async()=>{
   const status=await handleRequest(new Request('https://example.com/api/index?action=status'));
   assert.equal(status.status,503);
   const forged=await handleRequest(new Request('https://example.com/api/index?action=register',{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'}));
   assert.equal(forged.status,403);
 });
 
-test('Vercel Node entry point sends a JSON response without database configuration',async()=>{
+test('Vercel Node entry point sends a JSON response without Firebase configuration',async()=>{
   const request=Object.assign(Readable.from([]),{
     method:'GET',url:'/api/index?action=status',headers:{host:'example.com'},
   }) as unknown as IncomingMessage;

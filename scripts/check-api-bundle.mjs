@@ -2,7 +2,7 @@ import {strict as assert} from 'node:assert';
 import {Readable} from 'node:stream';
 
 // Run after bundling so production builds fail if the deployed entry point is broken.
-process.env.DATABASE_URL='';
+process.env.FIREBASE_PROJECT_ID='';
 const {default:handler}=await import('../api/index.mjs');
 const request=Object.assign(Readable.from([]),{
   method:'GET',url:'/api/index?action=status',headers:{host:'example.com'},

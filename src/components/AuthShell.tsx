@@ -22,7 +22,7 @@ export default function AuthShell({onAuthenticated,setupError}: {onAuthenticated
       await onAuthenticated(session);
     } catch(error) {
       setError(error instanceof AccountApiError && error.code==='setup_required'
-        ? '로그인 요청을 확인했지만 데이터베이스 설정이 완료되지 않았어요. 테스트 계정은 DB 연결 후 생성해야 해요.'
+        ? 'Firebase 연결이 아직 완료되지 않았어요. 서버 설정 후 회원가입하거나 다시 로그인해 주세요.'
         : error instanceof Error ? error.message : '다시 시도해 주세요.');
     }
     finally {setBusy(false);}

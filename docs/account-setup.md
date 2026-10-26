@@ -1,54 +1,66 @@
-# 계정·관리자 기능 설정
+# Firebase 계정·가계부 저장소 설정
 
-이 기능은 Vercel Function(`/api/index`)과 PostgreSQL을 사용합니다. 데이터베이스가
-연결되기 전에는 로그인 화면만 보이고 API는 `setup_required`로 거부합니다.
-브라우저 저장소를 회원 DB 대신 사용하지 않습니다.
+앱은 Vercel의 `/api/index` 서버 함수에서 Firebase Admin SDK로 Cloud Firestore에
+접속합니다. 브라우저에는 서비스 계정 키를 보내지 않습니다. 기존 아이디 기반
+회원가입·로그인과 관리자 화면은 그대로 사용하며, 별도의 Firebase Authentication
+이메일 계정은 만들지 않습니다. 서버 설정 전에는 `setup_required`로 거부합니다.
 
-## Vercel 연결
+## Firebase 프로젝트 `asset-1d626`
 
-1. Vercel의 `asset` 프로젝트에서 Marketplace의 PostgreSQL(예: Neon)을 연결합니다.
-2. 프로젝트 환경 변수에 서버 전용 `DATABASE_URL`과 `FIELD_ENCRYPTION_KEY`를
-   설정합니다. 연결된 DB가 별도 변수명을 발급하면 그 값을 `DATABASE_URL`에도
-   등록합니다. 키는 `openssl rand -base64 32`로 한 번 생성합니다.
-3. Production과 Preview에 필요한 환경 변수를 적용하고 재배포합니다. 서버가
-   첫 요청 시 테이블을 생성합니다. DB 계정에는 테이블 생성 권한이 있어야 합니다.
-4. 일반 사용자는 로그인 화면에서 직접 회원가입합니다. 관리자 계정만 만들려면
-   동일한 `DATABASE_URL`과 `FIELD_ENCRYPTION_KEY`를 로컬 서버 환경에 설정하고,
-   일회성 `ADMIN_BOOTSTRAP_PASSWORD`를 전달해 `npm run accounts:create-admin`을
-   실행합니다. 이 명령은 `admin` 계정만 만들며, 이미 있으면 덮어쓰지 않습니다.
-   비밀번호는 명령 실행 후 환경에서 제거하세요. 이미 가입한 계정에 관리자
-   권한을 부여할 때만 `npm run admin:grant -- <아이디>`를 사용합니다.
+1. [Firebase 콘솔](https://console.firebase.google.com/project/asset-1d626/firestore)에서
+   Cloud Firestore 데이터베이스를 만듭니다. 이미 있으면 이 단계를 건너뜁니다.
+2. 서버 전용 서비스 계정에 Firestore 읽기·쓰기 권한을 부여하고 비공개 키를
+   발급합니다. [Firebase Admin SDK 설정](https://firebase.google.com/docs/admin/setup)을
+   참고하세요. 기존 Firestore 보안 규칙에서 아래 앱 컬렉션이 브라우저에 공개되지
+   않는지도 확인하세요. Admin SDK는 보안 규칙과 별도로 서버 권한으로 접속합니다.
+   키 파일을 Git이나 채팅에 올리지 마세요.
+3. Vercel의 `asset` 프로젝트 → Settings → Environment Variables에서 **Production**에
+   아래 네 값을 설정합니다. 변경 후 Production을 재배포합니다.
 
-계정 생성 스크립트와 `npm run dev`는 프로젝트 루트의 `.env.local`을 읽습니다.
-서버 전용 DB 값을 추가한 뒤 개발 서버를 재시작하세요. 관리자의 최초
-생년월일·휴대폰 번호는 테스트용 임시 값이며, 로그인 후 마이페이지에서 수정할
-수 있습니다. 비밀번호와 DB 연결 문자열은 소스 코드나 커밋에 넣지 마세요.
+   | 이름 | 값 |
+   | --- | --- |
+   | `FIREBASE_PROJECT_ID` | `asset-1d626` |
+   | `FIREBASE_CLIENT_EMAIL` | 서비스 계정 JSON의 `client_email` |
+   | `FIREBASE_PRIVATE_KEY` | 서비스 계정 JSON의 `private_key` 전체. 실제 줄바꿈과 `\\n` 모두 지원 |
+   | `FIELD_ENCRYPTION_KEY` | `openssl rand -base64 32`로 한 번 생성한 값 |
 
-`.env.local`은 Git에 올리지 않습니다. `FIELD_ENCRYPTION_KEY`를 분실하거나
-변경하면 암호화된 아이디·생년월일·휴대폰 번호·가계부를 복호화할 수 없습니다.
-안전한 비밀 저장소에 별도로 백업하세요.
+   `FIREBASE_*`에 `VITE_` 접두사를 붙이지 마세요. Vite의 `VITE_*` 값은 브라우저에
+   노출됩니다. 로컬 개발에는 `.env.example`을 참고해 프로젝트 루트의
+   `.env.local`에 같은 값을 넣고 개발 서버를 재시작합니다. Google Application
+   Default Credentials를 쓰는 로컬 환경에서는 서비스 계정 두 값 대신
+   `GOOGLE_APPLICATION_CREDENTIALS` 파일 경로를 사용할 수 있습니다.
 
-## 동작
+4. 일반 사용자는 로그인 화면에서 직접 가입합니다. 관리자 계정은 같은 서버
+   환경값을 가진 로컬 환경에서 `ADMIN_BOOTSTRAP_PASSWORD`를 일시적으로 설정한 뒤
+   `npm run accounts:create-admin`으로 한 번만 만듭니다. 이 명령은 `admin`이 이미
+   있으면 덮어쓰지 않습니다. 실행 후 부트스트랩 비밀번호를 환경에서 제거하세요.
+   기존 사용자에게 관리자 권한을 부여할 때만
+   `npm run admin:grant -- <아이디>`를 사용합니다.
 
-- 비밀번호: 영문 대문자·소문자·특수문자를 포함한 8~128자. 서버는 사용자별
-  솔트와 scrypt 해시를 저장하며, 원문이나 복호화 가능한 비밀번호는 저장하지
-  않습니다.
-- 아이디·생년월일·휴대폰 번호·가계부: 서버에서 AES-256-GCM으로 암호화해
-  저장합니다. 이름만 평문입니다. 아이디 검색에는 키 기반 블라인드 인덱스를
-  사용합니다.
-- 인증: 14일짜리 서버 세션을 HttpOnly/SameSite 쿠키로 보관하고, 모든 회원
-  정보·가계부 API는 요청마다 세션을 검사합니다. 관리자 권한도 서버에서
-  확인합니다. 로그인 시도는 아이디·IP별로 제한합니다.
-- 관리자 계정 접속: 관리자가 일반 회원을 선택하면 별도의 접속 세션이 생기며
-  화면에 접속 중 표시가 나타납니다. 시작·종료·회원 정보 및 가계부 변경은
-  `admin_audit`에 기록됩니다. 관리자에게 돌아갈 수 있습니다.
-- 과거 로컬 가계부: 첫 로그인 후 서버 데이터가 비어 있고 이 기기에 이전
-  기록이 있으면 가져오기 버튼이 표시됩니다. 사용자가 선택한 후 서버 저장이
-  성공해야 이전 브라우저 데이터를 삭제합니다.
+`FIELD_ENCRYPTION_KEY`는 안전한 비밀 저장소에 별도 백업해야 합니다. 바꾸거나
+잃어버리면 기존 아이디·생년월일·휴대폰 번호·가계부를 복호화할 수 없습니다.
+기존 PostgreSQL 계정은 Firestore로 자동 이전되지 않습니다. 이전 DB에 회원이
+있다면 별도 마이그레이션 후 전환해야 합니다.
+
+## 저장·보안 동작
+
+- `users`, `usernames`, `sessions`, `auth_attempts`, `app_data`, `admin_audit` 컬렉션을
+  서버에서 사용합니다. 브라우저가 Firestore에 직접 접속하지 않습니다.
+- 비밀번호는 사용자별 솔트로 scrypt 해시하고, 아이디·생년월일·휴대폰 번호·
+  가계부 데이터는 서버에서 AES-256-GCM으로 암호화합니다. 이름은 회원 검색을 위해
+  평문으로 저장하고, 아이디 검색에는 키 기반 블라인드 인덱스를 씁니다.
+- 회원가입의 아이디 중복 검사와 가계부 버전 갱신은 Firestore 트랜잭션으로
+  처리합니다. 다른 창에서 먼저 저장하면 버전 충돌을 반환합니다.
+- 인증은 14일짜리 HttpOnly/SameSite 쿠키와 서버 세션으로 확인합니다. 관리자
+  회원 접속은 별도 세션과 감사 기록을 남깁니다.
+- 현재 관리자 통계·회원 검색은 Firestore 문서를 읽어 집계합니다. 회원 수가
+  커지면 집계 문서와 검색 인덱스로 교체해야 합니다.
+- 가계부 스냅샷은 Firestore 문서 크기 제한을 고려해 600KB 이하만 받습니다.
+  저장 전 CSV 백업 기능은 계속 사용할 수 있습니다.
 
 ## 검증
 
-`npm run build`, `npm test`, `npm run test:e2e`, `npm run test:e2e:auth`를
-실행합니다. 실제 DB가 없는 환경에서는 계정 API의 DB 통합 경로를 검증할 수
-없으므로, PostgreSQL 연결 후 회원가입·로그인·정보 수정·관리자 접속·재로그인을
-한 차례 확인해야 합니다.
+`npm run build`와 `npm test`가 서버 번들, 암호화, 계정·세션·가계부 API 흐름을
+검증합니다. 가짜 Firestore 테스트는 실제 서비스 계정 권한·네트워크까지 확인하지
+않습니다. 환경 변수 설정 후 실서버에서 회원가입 → 가계부 저장 → 새로고침 후
+재로그인 → 관리자 계정 접속을 확인해야 연결이 완료됩니다.

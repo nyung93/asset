@@ -2,69 +2,27 @@
 import { randomUUID } from "node:crypto";
 
 // server/db.ts
-import pg from "pg";
-var pool;
-var schemaReady;
-function database() {
-  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is missing");
-  if (!pool) pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3, idleTimeoutMillis: 1e4 });
-  return pool;
+import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
+var firestore;
+function firebaseConfigured() {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  return !!(projectId && (process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY || process.env.GOOGLE_APPLICATION_CREDENTIALS));
 }
-async function ensureSchema() {
-  if (schemaReady) return schemaReady;
-  schemaReady = (async () => {
-    const db = database();
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id UUID PRIMARY KEY,
-        name TEXT NOT NULL,
-        username_lookup CHAR(64) NOT NULL UNIQUE,
-        username_cipher TEXT NOT NULL,
-        birth_date_cipher TEXT NOT NULL,
-        phone_cipher TEXT NOT NULL,
-        password_hash TEXT NOT NULL,
-        role TEXT NOT NULL DEFAULT 'USER' CHECK (role IN ('USER','ADMIN')),
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        last_login_at TIMESTAMPTZ
-      );
-      CREATE TABLE IF NOT EXISTS sessions (
-        id UUID PRIMARY KEY,
-        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        token_hash CHAR(64) NOT NULL UNIQUE,
-        actor_admin_id UUID REFERENCES users(id) ON DELETE CASCADE,
-        expires_at TIMESTAMPTZ NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
-      CREATE TABLE IF NOT EXISTS app_data (
-        user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-        data_cipher TEXT NOT NULL,
-        version INTEGER NOT NULL DEFAULT 1,
-        transaction_count INTEGER NOT NULL DEFAULT 0,
-        total_expense BIGINT NOT NULL DEFAULT 0,
-        total_saving BIGINT NOT NULL DEFAULT 0,
-        total_xp INTEGER NOT NULL DEFAULT 0,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      CREATE TABLE IF NOT EXISTS auth_attempts (
-        attempt_key CHAR(64) PRIMARY KEY,
-        failed_count INTEGER NOT NULL DEFAULT 0,
-        locked_until TIMESTAMPTZ,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-      CREATE TABLE IF NOT EXISTS admin_audit (
-        id UUID PRIMARY KEY,
-        actor_admin_id UUID NOT NULL REFERENCES users(id),
-        target_user_id UUID NOT NULL REFERENCES users(id),
-        action TEXT NOT NULL,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-      );
-    `);
-  })().catch((error) => {
-    schemaReady = void 0;
-    throw error;
-  });
-  return schemaReady;
+function database() {
+  if (firestore) return firestore;
+  if (!firebaseConfigured()) throw new Error("Firebase server credentials are missing");
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const app = getApps().find((candidate) => candidate.name === "rich-grandma-tycoon") ?? initializeApp({
+    projectId,
+    credential: process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY ? cert({
+      projectId,
+      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n")
+    }) : applicationDefault()
+  }, "rich-grandma-tycoon");
+  firestore = getFirestore(app);
+  return firestore;
 }
 
 // server/security.ts
@@ -195,12 +153,14 @@ function publicUser(user) {
 }
 async function session(token) {
   if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const result = await database().query(
-    `SELECT u.*, s.id AS session_id, s.actor_admin_id FROM sessions s JOIN users u ON u.id=s.user_id
-     WHERE s.token_hash=$1 AND s.expires_at>now()`,
-    [tokenHash(token)]
-  );
-  return result.rows[0] ?? null;
+  const id = tokenHash(token);
+  const found = await database().collection("sessions").doc(id).get();
+  if (!found.exists) return null;
+  const saved = found.data();
+  if (saved.expires_at <= (/* @__PURE__ */ new Date()).toISOString()) return null;
+  const user = await database().collection("users").doc(saved.user_id).get();
+  if (!user.exists) return null;
+  return { ...user.data(), session_id: id, actor_admin_id: saved.actor_admin_id };
 }
 async function auth(req) {
   const primary = await session(readCookie(req, "rgt_session"));
@@ -216,8 +176,12 @@ function adminOnly(state) {
 }
 async function createSession(userId, actorAdminId) {
   const token = newToken();
-  await database().query(`INSERT INTO sessions (id,user_id,token_hash,actor_admin_id,expires_at)
-    VALUES ($1,$2,$3,$4,now()+interval '14 days')`, [randomUUID(), userId, tokenHash(token), actorAdminId ?? null]);
+  await database().collection("sessions").doc(tokenHash(token)).create({
+    user_id: userId,
+    actor_admin_id: actorAdminId ?? null,
+    expires_at: new Date(Date.now() + 14 * 864e5).toISOString(),
+    created_at: (/* @__PURE__ */ new Date()).toISOString()
+  });
   return token;
 }
 async function register(req, input) {
@@ -230,16 +194,32 @@ async function register(req, input) {
   if (!passwordRule(password)) throw new ApiError(400, "\uBE44\uBC00\uBC88\uD638\uB294 8\uC790 \uC774\uC0C1\uC774\uBA70 \uC601\uBB38 \uB300\uBB38\uC790\xB7\uC18C\uBB38\uC790\xB7\uD2B9\uC218\uBB38\uC790\uB97C \uD3EC\uD568\uD574\uC57C \uD574\uC694.");
   const id = randomUUID();
   const hashed = await hashPassword(password);
+  const row = {
+    id,
+    name,
+    username_cipher: encryptField(username),
+    birth_date_cipher: encryptField(birthDate),
+    phone_cipher: encryptField(phone),
+    password_hash: hashed,
+    role: "USER",
+    created_at: (/* @__PURE__ */ new Date()).toISOString(),
+    last_login_at: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  const lookup = usernameLookup(username);
   try {
-    await database().query(`INSERT INTO users (id,name,username_lookup,username_cipher,birth_date_cipher,phone_cipher,password_hash,last_login_at)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,now())`, [id, name, usernameLookup(username), encryptField(username), encryptField(birthDate), encryptField(phone), hashed]);
+    await database().runTransaction(async (transaction) => {
+      const usernameRef = database().collection("usernames").doc(lookup);
+      if ((await transaction.get(usernameRef)).exists) throw new ApiError(409, "\uC774\uBBF8 \uC0AC\uC6A9 \uC911\uC778 \uC544\uC774\uB514\uC608\uC694.", "duplicate_username");
+      transaction.create(database().collection("users").doc(id), { ...row, username_lookup: lookup });
+      transaction.create(usernameRef, { user_id: id });
+    });
   } catch (error) {
-    if (error.code === "23505") throw new ApiError(409, "\uC774\uBBF8 \uC0AC\uC6A9 \uC911\uC778 \uC544\uC774\uB514\uC608\uC694.", "duplicate_username");
+    if (error instanceof ApiError) throw error;
+    if (error.code === 6) throw new ApiError(409, "\uC774\uBBF8 \uC0AC\uC6A9 \uC911\uC778 \uC544\uC774\uB514\uC608\uC694.", "duplicate_username");
     throw error;
   }
   const token = await createSession(id);
-  const user = await database().query("SELECT * FROM users WHERE id=$1", [id]);
-  return response({ user: publicUser(user.rows[0]), impersonating: false }, 201, [cookie(req, "rgt_session", token, 14 * 86400)]);
+  return response({ user: publicUser(row), impersonating: false }, 201, [cookie(req, "rgt_session", token, 14 * 86400)]);
 }
 var dummyHash;
 async function login(req, input) {
@@ -253,30 +233,39 @@ async function login(req, input) {
   const lookup = usernameLookup(username);
   const ip = (req.headers.get("x-forwarded-for") ?? "unknown").split(",")[0].trim().slice(0, 80);
   const attemptKey = tokenHash(`${lookup}:${ip}`);
-  const attempts = await database().query("SELECT failed_count,locked_until FROM auth_attempts WHERE attempt_key=$1", [attemptKey]);
-  if (attempts.rows[0]?.locked_until && new Date(attempts.rows[0].locked_until).getTime() > Date.now()) throw new ApiError(429, "\uB85C\uADF8\uC778 \uC2DC\uB3C4\uAC00 \uB9CE\uC544\uC694. 15\uBD84 \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.", "rate_limited");
-  const users = await database().query("SELECT * FROM users WHERE username_lookup=$1", [lookup]);
-  const user = users.rows[0];
+  const attemptRef = database().collection("auth_attempts").doc(attemptKey);
+  const attempt = (await attemptRef.get()).data();
+  if (attempt?.locked_until && attempt.locked_until > (/* @__PURE__ */ new Date()).toISOString()) throw new ApiError(429, "\uB85C\uADF8\uC778 \uC2DC\uB3C4\uAC00 \uB9CE\uC544\uC694. 15\uBD84 \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.", "rate_limited");
+  const index = await database().collection("usernames").doc(lookup).get();
+  const userId = index.data()?.user_id;
+  const found = userId ? await database().collection("users").doc(userId).get() : null;
+  const user = found?.data();
   dummyHash ??= hashPassword("Dummy!password");
   const correct = await verifyPassword(password, user?.password_hash ?? await dummyHash);
   if (!user || !correct) {
-    await database().query(`INSERT INTO auth_attempts (attempt_key,failed_count,locked_until,updated_at)
-      VALUES ($1,1,NULL,now()) ON CONFLICT (attempt_key) DO UPDATE SET
-      failed_count=CASE WHEN auth_attempts.updated_at<now()-interval '15 minutes' THEN 1 ELSE auth_attempts.failed_count+1 END,
-      locked_until=CASE WHEN auth_attempts.failed_count>=4 AND auth_attempts.updated_at>=now()-interval '15 minutes' THEN now()+interval '15 minutes' ELSE NULL END,
-      updated_at=now()`, [attemptKey]);
+    await database().runTransaction(async (transaction) => {
+      const previous = (await transaction.get(attemptRef)).data();
+      const now = Date.now();
+      const recent = previous && new Date(previous.updated_at).getTime() >= now - 15 * 6e4;
+      const failedCount = recent ? previous.failed_count + 1 : 1;
+      transaction.set(attemptRef, {
+        failed_count: failedCount,
+        locked_until: failedCount >= 5 ? new Date(now + 15 * 6e4).toISOString() : null,
+        updated_at: new Date(now).toISOString()
+      });
+    });
     throw new ApiError(401, "\uC544\uC774\uB514 \uB610\uB294 \uBE44\uBC00\uBC88\uD638\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.", "invalid_credentials");
   }
-  await database().query("DELETE FROM auth_attempts WHERE attempt_key=$1", [attemptKey]);
-  await database().query("UPDATE users SET last_login_at=now() WHERE id=$1", [user.id]);
-  user.last_login_at = /* @__PURE__ */ new Date();
+  await attemptRef.delete();
+  user.last_login_at = (/* @__PURE__ */ new Date()).toISOString();
+  await database().collection("users").doc(user.id).update({ last_login_at: user.last_login_at });
   const token = await createSession(user.id);
   return response({ user: publicUser(user), impersonating: false }, 200, [cookie(req, "rgt_session", token, 14 * 86400), cookie(req, "rgt_impersonation", "", 0)]);
 }
 async function logout(req) {
   const primary = readCookie(req, "rgt_session"), impersonated = readCookie(req, "rgt_impersonation");
-  if (primary) await database().query("DELETE FROM sessions WHERE token_hash=$1", [tokenHash(primary)]);
-  if (impersonated) await database().query("DELETE FROM sessions WHERE token_hash=$1", [tokenHash(impersonated)]);
+  if (primary) await database().collection("sessions").doc(tokenHash(primary)).delete();
+  if (impersonated) await database().collection("sessions").doc(tokenHash(impersonated)).delete();
   return response({ ok: true }, 200, [cookie(req, "rgt_session", "", 0), cookie(req, "rgt_impersonation", "", 0)]);
 }
 async function updateProfile(state, input) {
@@ -290,13 +279,14 @@ async function updateProfile(state, input) {
     if (!await verifyPassword(currentPassword, state.effective.password_hash)) throw new ApiError(403, "\uD604\uC7AC \uBE44\uBC00\uBC88\uD638\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.", "invalid_password");
     passwordHash = await hashPassword(nextPassword);
   }
-  await database().query(
-    `UPDATE users SET birth_date_cipher=$1,phone_cipher=$2,password_hash=COALESCE($3,password_hash) WHERE id=$4`,
-    [encryptField(birthDate), encryptField(phone), passwordHash, state.effective.id]
-  );
+  const updates = {
+    birth_date_cipher: encryptField(birthDate),
+    phone_cipher: encryptField(phone),
+    ...passwordHash ? { password_hash: passwordHash } : {}
+  };
+  await database().collection("users").doc(state.effective.id).update(updates);
   if (state.impersonationId) await audit(state.primary.id, state.effective.id, "PROFILE_UPDATE");
-  const user = await database().query("SELECT * FROM users WHERE id=$1", [state.effective.id]);
-  return response({ user: publicUser(user.rows[0]), impersonating: !!state.impersonationId });
+  return response({ user: publicUser({ ...state.effective, ...updates }), impersonating: !!state.impersonationId });
 }
 function appData(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError(400, "\uC800\uC7A5\uD560 \uB370\uC774\uD130\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.");
@@ -311,64 +301,93 @@ function metrics(data) {
   return [transactions.length, total("EXPENSE"), total("SAVING"), Number.isSafeInteger(character.totalXp) ? character.totalXp : 0];
 }
 async function getData(state) {
-  const result = await database().query("SELECT data_cipher,version FROM app_data WHERE user_id=$1", [state.effective.id]);
-  const row = result.rows[0];
+  const row = (await database().collection("app_data").doc(state.effective.id).get()).data();
   return response({ data: row ? JSON.parse(decryptField(row.data_cipher)) : null, version: row?.version ?? 0 });
 }
 async function saveData(state, input) {
   const data = appData(input.data);
   const version = input.version;
   if (!Number.isSafeInteger(version) || Number(version) < 0) throw new ApiError(400, "\uB370\uC774\uD130 \uBC84\uC804\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
-  const encrypted = encryptField(JSON.stringify(data));
+  const serialized = JSON.stringify(data);
+  if (Buffer.byteLength(serialized, "utf8") > 6e5) throw new ApiError(413, "\uAC00\uACC4\uBD80 \uB370\uC774\uD130\uAC00 \uB108\uBB34 \uCEE4\uC694. CSV\uB85C \uBC31\uC5C5\uD55C \uB4A4 \uBB38\uC758\uD574 \uC8FC\uC138\uC694.", "data_too_large");
+  const encrypted = encryptField(serialized);
   const [count, expense, saving, xp] = metrics(data);
-  let saved;
-  if (version === 0) {
-    const result = await database().query(`INSERT INTO app_data
-      (user_id,data_cipher,transaction_count,total_expense,total_saving,total_xp) VALUES ($1,$2,$3,$4,$5,$6)
-      ON CONFLICT (user_id) DO NOTHING RETURNING version`, [state.effective.id, encrypted, count, expense, saving, xp]);
-    saved = result.rows[0];
-  } else {
-    const result = await database().query(`UPDATE app_data SET data_cipher=$1,version=version+1,
-      transaction_count=$2,total_expense=$3,total_saving=$4,total_xp=$5,updated_at=now()
-      WHERE user_id=$6 AND version=$7 RETURNING version`, [encrypted, count, expense, saving, xp, state.effective.id, version]);
-    saved = result.rows[0];
-  }
-  if (!saved) throw new ApiError(409, "\uB2E4\uB978 \uCC3D\uC5D0\uC11C \uB370\uC774\uD130\uAC00 \uBCC0\uACBD\uB410\uC5B4\uC694. \uC0C8\uB85C\uACE0\uCE68 \uD6C4 \uB2E4\uC2DC \uD655\uC778\uD574 \uC8FC\uC138\uC694.", "version_conflict");
+  const ref = database().collection("app_data").doc(state.effective.id);
+  const nextVersion = Number(version) + 1;
+  await database().runTransaction(async (transaction) => {
+    const prior = await transaction.get(ref);
+    const currentVersion = prior.data()?.version ?? 0;
+    if (currentVersion !== version) throw new ApiError(409, "\uB2E4\uB978 \uCC3D\uC5D0\uC11C \uB370\uC774\uD130\uAC00 \uBCC0\uACBD\uB410\uC5B4\uC694. \uC0C8\uB85C\uACE0\uCE68 \uD6C4 \uB2E4\uC2DC \uD655\uC778\uD574 \uC8FC\uC138\uC694.", "version_conflict");
+    const row = {
+      data_cipher: encrypted,
+      version: nextVersion,
+      transaction_count: count,
+      total_expense: expense,
+      total_saving: saving,
+      total_xp: xp,
+      updated_at: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    if (prior.exists) transaction.update(ref, row);
+    else transaction.create(ref, row);
+  });
   if (state.impersonationId) await audit(state.primary.id, state.effective.id, "DATA_UPDATE");
-  return response({ version: saved.version });
+  return response({ version: nextVersion });
 }
 async function audit(actor, target, action) {
-  await database().query("INSERT INTO admin_audit (id,actor_admin_id,target_user_id,action) VALUES ($1,$2,$3,$4)", [randomUUID(), actor, target, action]);
+  await database().collection("admin_audit").doc(randomUUID()).create({ actor_admin_id: actor, target_user_id: target, action, created_at: (/* @__PURE__ */ new Date()).toISOString() });
 }
 async function dashboard() {
-  const users = await database().query(`SELECT count(*)::int AS total_users,
-    count(*) FILTER (WHERE created_at>=date_trunc('month',now()))::int AS new_users_this_month,
-    count(*) FILTER (WHERE last_login_at>=now()-interval '30 days')::int AS active_users_30d FROM users`);
-  const data = await database().query(`SELECT COALESCE(sum(transaction_count),0)::bigint AS transaction_count,
-    COALESCE(sum(total_expense),0)::bigint AS total_expense,
-    COALESCE(sum(total_saving),0)::bigint AS total_saving,
-    COALESCE(sum(total_xp),0)::bigint AS total_xp FROM app_data`);
-  return response({ users: users.rows[0], data: data.rows[0] });
+  const [users, data] = await Promise.all([database().collection("users").get(), database().collection("app_data").get()]);
+  const now = Date.now();
+  const monthStart = /* @__PURE__ */ new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const members2 = users.docs.map((doc) => doc.data());
+  const total = (key) => String(data.docs.reduce((sum, doc) => sum + (Number(doc.data()[key]) || 0), 0));
+  return response({
+    users: {
+      total_users: members2.length,
+      new_users_this_month: members2.filter((user) => user.created_at >= monthStart.toISOString()).length,
+      active_users_30d: members2.filter((user) => user.last_login_at && new Date(user.last_login_at).getTime() >= now - 30 * 864e5).length
+    },
+    data: {
+      transaction_count: total("transaction_count"),
+      total_expense: total("total_expense"),
+      total_saving: total("total_saving"),
+      total_xp: total("total_xp")
+    }
+  });
 }
 async function members(req) {
   const url = new URL(req.url);
   const search = (url.searchParams.get("search") ?? "").trim().slice(0, 40);
   const offset = Math.max(0, Math.min(1e5, Number(url.searchParams.get("offset") ?? 0) || 0));
-  let lookup = "0000000000000000000000000000000000000000000000000000000000000000";
+  let lookup = "";
   try {
     if (search) lookup = usernameLookup(search);
   } catch {
   }
-  const result = await database().query(`SELECT * FROM users WHERE ($1='' OR name ILIKE $2 OR username_lookup=$3)
-    ORDER BY created_at DESC LIMIT 51 OFFSET $4`, [search, `%${search.replace(/[\\%_]/g, "\\$&")}%`, lookup, offset]);
-  return response({ members: result.rows.slice(0, 50).map((user) => ({ id: user.id, name: user.name, username: decryptField(user.username_cipher), role: user.role, lastLoginAt: user.last_login_at, createdAt: user.created_at })), hasMore: result.rows.length > 50 });
+  const normalized = search.toLocaleLowerCase("ko-KR");
+  const users = await database().collection("users").get();
+  const filtered = users.docs.map((doc) => doc.data()).filter((user) => !search || user.name.toLocaleLowerCase("ko-KR").includes(normalized) || user.username_lookup === lookup).sort((left, right) => right.created_at.localeCompare(left.created_at));
+  return response({
+    members: filtered.slice(offset, offset + 50).map((user) => ({
+      id: user.id,
+      name: user.name,
+      username: decryptField(user.username_cipher),
+      role: user.role,
+      lastLoginAt: user.last_login_at,
+      createdAt: user.created_at
+    })),
+    hasMore: filtered.length > offset + 50
+  });
 }
 async function impersonate(req, state, input) {
   adminOnly(state);
   const targetId = string(input.userId, 36);
-  const result = await database().query("SELECT * FROM users WHERE id=$1 AND role=$2", [targetId, "USER"]);
-  const target = result.rows[0];
+  const target = (await database().collection("users").doc(targetId).get()).data();
   if (!target || target.id === state.primary.id) throw new ApiError(404, "\uC811\uC18D\uD560 \uD68C\uC6D0\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
+  if (target.role !== "USER") throw new ApiError(404, "\uC811\uC18D\uD560 \uD68C\uC6D0\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
   const token = await createSession(target.id, state.primary.id);
   await audit(state.primary.id, target.id, "IMPERSONATION_START");
   return response({ user: publicUser(target), impersonating: true, adminName: state.primary.name }, 200, [cookie(req, "rgt_impersonation", token, 14 * 86400)]);
@@ -376,34 +395,33 @@ async function impersonate(req, state, input) {
 async function stopImpersonation(req, state) {
   if (!state.impersonationId) throw new ApiError(400, "\uD68C\uC6D0 \uACC4\uC815 \uC811\uC18D \uC911\uC774 \uC544\uB2C8\uC5D0\uC694.");
   await audit(state.primary.id, state.effective.id, "IMPERSONATION_STOP");
-  await database().query("DELETE FROM sessions WHERE id=$1", [state.impersonationId]);
+  await database().collection("sessions").doc(state.impersonationId).delete();
   return response({ user: publicUser(state.primary), impersonating: false }, 200, [cookie(req, "rgt_impersonation", "", 0)]);
 }
 async function handleRequest(req) {
   try {
     if (req.method !== "GET" && req.method !== "POST") throw new ApiError(405, "\uC9C0\uC6D0\uD558\uC9C0 \uC54A\uB294 \uC694\uCCAD\uC774\uC5D0\uC694.");
     if (req.method === "POST") sameOrigin(req);
-    if (!process.env.DATABASE_URL || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY, "base64").length !== 32) throw new ApiError(503, "\uB370\uC774\uD130\uBCA0\uC774\uC2A4 \uC5F0\uACB0\uC744 \uC900\uBE44\uD558\uACE0 \uC788\uC5B4\uC694.", "setup_required");
-    await ensureSchema();
+    if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY, "base64").length !== 32) throw new ApiError(503, "Firebase \uC5F0\uACB0\uC744 \uC900\uBE44\uD558\uACE0 \uC788\uC5B4\uC694.", "setup_required");
     const action = new URL(req.url).searchParams.get("action");
-    if (req.method === "POST" && action === "register") return register(req, await body(req));
-    if (req.method === "POST" && action === "login") return login(req, await body(req));
-    if (req.method === "POST" && action === "logout") return logout(req);
+    if (req.method === "POST" && action === "register") return await register(req, await body(req));
+    if (req.method === "POST" && action === "login") return await login(req, await body(req));
+    if (req.method === "POST" && action === "logout") return await logout(req);
     const state = await auth(req);
     if (req.method === "GET" && action === "status") return response({ user: publicUser(state.effective), impersonating: !!state.impersonationId, adminName: state.impersonationId ? state.primary.name : void 0 });
-    if (req.method === "GET" && action === "data") return getData(state);
-    if (req.method === "POST" && action === "data") return saveData(state, await body(req));
-    if (req.method === "POST" && action === "profile") return updateProfile(state, await body(req));
-    if (req.method === "POST" && action === "stop-impersonation") return stopImpersonation(req, state);
+    if (req.method === "GET" && action === "data") return await getData(state);
+    if (req.method === "POST" && action === "data") return await saveData(state, await body(req));
+    if (req.method === "POST" && action === "profile") return await updateProfile(state, await body(req));
+    if (req.method === "POST" && action === "stop-impersonation") return await stopImpersonation(req, state);
     if (req.method === "GET" && action === "dashboard") {
       adminOnly(state);
-      return dashboard();
+      return await dashboard();
     }
     if (req.method === "GET" && action === "members") {
       adminOnly(state);
-      return members(req);
+      return await members(req);
     }
-    if (req.method === "POST" && action === "impersonate") return impersonate(req, state, await body(req));
+    if (req.method === "POST" && action === "impersonate") return await impersonate(req, state, await body(req));
     throw new ApiError(404, "\uC694\uCCAD\uD55C \uAE30\uB2A5\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
   } catch (error) {
     if (error instanceof ApiError) return response({ error: error.message, code: error.code }, error.status);
