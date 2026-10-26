@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 import {decryptField,encryptField,hashPassword,normalizeUsername,passwordRule,usernameLookup,verifyPassword} from './security';
 import {handleRequest} from './handler';
+import api from '../api/index';
 
 process.env.FIELD_ENCRYPTION_KEY=randomBytes(32).toString('base64');
 
@@ -27,6 +28,7 @@ test('password requirements and one-way scrypt verification',async()=>{
 });
 
 test('API fails closed without database and rejects cross-origin mutations',async()=>{
+  assert.equal(typeof api.fetch,'function');
   const status=await handleRequest(new Request('https://example.com/api/index?action=status'));
   assert.equal(status.status,503);
   const forged=await handleRequest(new Request('https://example.com/api/index?action=register',{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'}));

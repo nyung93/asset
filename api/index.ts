@@ -1,4 +1,4 @@
 import {handleRequest} from '../server/handler';
 
-export const GET = handleRequest;
-export const POST = handleRequest;
+// Vercel's Web Standard function entry point handles both GET and POST here.
+export default {fetch: handleRequest};
