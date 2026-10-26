@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { AvatarConfig, CharacterExpression, FiveVariant } from '../types';
+import type { AvatarConfig, CharacterExpression, CharacterImageId, FiveVariant } from '../types';
 import CharacterAvatar from './CharacterAvatar';
 import { HOUSE_STAGES } from '../lib/progression';
 
@@ -14,7 +14,7 @@ function Plant({x, y, scale = 1, golden = false}: {x: number; y: number; scale?:
   </g>;
 }
 
-export default function RoomIllustration({stage, avatar, expression = 'neutral'}: {stage: FiveVariant; avatar: AvatarConfig; expression?: CharacterExpression}) {
+export default function RoomIllustration({stage, avatar, expression = 'neutral', isCustomized = false, characterId}: {stage: FiveVariant; avatar: AvatarConfig; expression?: CharacterExpression; isCustomized?: boolean; characterId?:CharacterImageId}) {
   const uid = useId();
   const window = stage === 1 ? {x: 88, y: 69, width: 210, height: 85} : stage === 2 ? {x: 72, y: 48, width: 290, height: 180}
     : stage === 3 ? {x: 58, y: 33, width: 410, height: 196} : stage === 4 ? {x: 44, y: 28, width: 572, height: 207} : {x: 64, y: 23, width: 672, height: 220};
@@ -71,7 +71,7 @@ export default function RoomIllustration({stage, avatar, expression = 'neutral'}
     {stage >= 3 && <Plant x={758} y={272} scale={.8} golden={stage >= 4}/>}
     {stage >= 4 && <g data-testid="room-chandelier" stroke="#c6ad70" fill="none" strokeWidth="3"><path d="M400 0v39m-37 15q0 30 37 30t37-30m-18-9q0 16-19 24t-19-24m19-6v48"/>{[363,381,400,419,437].map((x, i) => <g key={x}><path d={`M${x} ${i === 2 ? 75 : i % 2 ? 44 : 54}v-15`}/><ellipse cx={x} cy={i === 2 ? 58 : i % 2 ? 27 : 37} rx="4" ry="7" fill="#fff3c8" stroke="none"/></g>)}<path d="m388 84 12 22 12-22Z" fill="#e1d5ae" strokeWidth="1"/></g>}
     {stage >= 3 && <g transform="translate(592 371)"><path d="m-34 0-12 36m79-36 12 36" stroke="#a5906a" strokeWidth="6"/><ellipse rx="66" ry="19" fill={stage === 5 ? '#f8f3e5' : '#c7b28b'}/><ellipse cx="-15" cy="-4" rx="13" ry="4" fill="#9aab8c"/><path d="M-25-5v-12h20v12" fill="#f3ecd6"/><path d="M-5-14q10 0 5 8" fill="none" stroke="#f3ecd6" strokeWidth="3"/><rect x="13" y="-7" width="28" height="7" rx="2" fill="#b59890"/></g>}
-    <CharacterAvatar avatar={avatar} expression={expression} x="289" y="137" width="204" height="295" data-testid="room-avatar"/>
+    <CharacterAvatar avatar={avatar} expression={expression} useDefaultArtwork={!isCustomized} characterId={characterId} x="289" y="137" width="204" height="295" data-testid="room-avatar"/>
     <g fill="#fff9df" opacity=".7"><path d="m247 269 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z"/>{stage >= 4 && <path d="m458 235 3 8 8 3-8 3-3 8-3-8-8-3 8-3Z"/>}</g>
   </svg>;
 }

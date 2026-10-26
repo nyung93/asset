@@ -1,6 +1,10 @@
-# 부자할미 타이쿤 — Phase 1–4
+# 부자할미 타이쿤
 
-React + Vite + TypeScript / Tailwind CSS / Lucide / Zustand persist.
+회원가입·로그인, 계정별 가계부 저장, 마이페이지, 관리자 대시보드 설정은
+[계정·관리자 기능 설정](docs/account-setup.md)을 참고하세요. 배포 시 PostgreSQL과
+서버 전용 환경 변수 `DATABASE_URL`, `FIELD_ENCRYPTION_KEY`가 필요합니다.
+
+React + Vite + TypeScript / Tailwind CSS / Lucide / Zustand / PostgreSQL.
 
 ```sh
 npm install
@@ -13,12 +17,13 @@ npm run dev
 npm run build     # 타입 검사 및 프로덕션 빌드
 npm test          # 날짜·투자·XP·정산·표정·스토어 검증
 npm run test:e2e  # 설치된 Google Chrome으로 데스크톱·모바일 브라우저 검증
+npm run test:e2e:auth  # 로그인·마이페이지·관리자 화면 검증
 ```
 
 주요 파일:
 
 - `src/types/index.ts`: 전체 도메인 타입과 데이터 스냅샷 인터페이스
-- `src/store/index.ts`: 상태 변경 액션, 입력 검증, LocalStorage 영속화
+- `src/store/index.ts`: 상태 변경 액션과 입력 검증. 실제 회원 데이터는 서버에 저장
 - `src/App.tsx`: 반응형 5개 탭
 - `src/components/GoalsAndSettingsTab.tsx`: 연간/월간 목표, 기간 선택, 예산 코드 CRUD
 - `src/components/CalendarTab.tsx`: 월간·주간·일간 가계부, 입력 모달, 삭제 확인, 일일 XP 토스트
@@ -36,7 +41,7 @@ npm run test:e2e  # 설치된 Google Chrome으로 데스크톱·모바일 브라
 
 레벨과 집은 누적 XP에 따라 상승합니다. 아래 Phase 4의 구간을 사용하며 기존 저장 데이터도 누적 XP로 이전합니다.
 
-Firebase 전환 시 `AppData`를 repository의 읽기/쓰기 스냅샷으로 사용하고, actions와 원격 동기화 계층을 분리할 수 있습니다. 현재 데이터는 이 브라우저의 LocalStorage에 저장됩니다.
+Firebase 전환 시 `AppData`를 repository의 읽기/쓰기 스냅샷으로 사용하고, actions와 원격 동기화 계층을 분리할 수 있습니다. 로그인한 계정의 데이터는 PostgreSQL에 암호화해 저장합니다. 서버 연결이 없으면 저장되지 않으며, 화면에 저장 실패 안내가 표시됩니다. LocalStorage는 이전 버전 데이터 가져오기와 격리된 테스트에서만 사용합니다.
 
 
 ## Phase 3 투자 포트폴리오
@@ -75,10 +80,10 @@ RGT_LIVE_QUOTES=1 npm run test:e2e
 
 ## Phase 4 마이룸·캐릭터·XP 정산
 
-- `src/components/CharacterAvatar.tsx`: 외부 이미지 없이 헤어·눈·얼굴·피부·상의·하의·신발 SVG 레이어를 합성합니다. 피부를 포함한 6개 파츠는 각 5종, 신발은 3종입니다. 큰 얼굴, 짧고 통통한 팔다리, 넓은 미간, 피치색 볼 터치와 따뜻한 파스텔 선화를 사용합니다.
-- `src/components/CharacterCreator.tsx`: 모든 파츠와 5가지 표정을 즉시 미리 볼 수 있습니다. 완성 버튼으로 저장하며 취소·닫기는 편집 내용을 버립니다. 표정 미리보기는 저장하지 않습니다.
+- `src/data/characterChoices.ts`와 `src/components/CharacterPicker.tsx`: 투명 배경 캐릭터 이미지 5개 중 하나를 홈 또는 마이페이지에서 고르면 계정에 저장하고 앱 전반에 즉시 적용합니다.
+- `src/components/CharacterAvatar.tsx`: 선택한 완성 캐릭터를 렌더링합니다. 이전에 파츠로 꾸민 아바타 데이터도 선택 전까지 기존 SVG 레이어로 보여줍니다.
 - `src/components/RoomIllustration.tsx`: 5단계 방과 창밖 풍경, 소파·화분·샹들리에를 SVG로 그립니다.
-- `src/components/HomeTab.tsx`: 마이룸, 옷장, 다음 집 진행률, 남은 예산, 목표 보상 수령과 레벨업 색종이 효과를 통합합니다. 동작 줄이기 설정을 존중합니다.
+- `src/components/HomeTab.tsx`: 마이룸, 캐릭터 고르기, 다음 집 진행률, 남은 예산, 목표 보상 수령과 레벨업 색종이 효과를 통합합니다. 동작 줄이기 설정을 존중합니다.
 - `src/lib/progression.ts`: 누적 XP에서 레벨과 집을 계산합니다.
 - `src/lib/XpSettlementEngine.ts`: 날짜·목표·거래·저장 투자 평가액으로 보상 조건을 계산하는 순수 함수입니다.
 - `src/lib/characterMood.ts`: 기본·웃음·덤덤·찡그림·울음 표정 및 응원 문구를 결정합니다.

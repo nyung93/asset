@@ -1,8 +1,8 @@
 import type {AvatarConfig, CharacterExpression, FiveVariant} from '../types';
 
 export const DEFAULT_AVATAR_CONFIG: AvatarConfig = {
-  hair:2, eyes:1, face:1, skin:1, top:1, bottom:1, shoes:1,
-  outfit:1, accessory:0, headAccessory:0, handAccessory:0, faceExpression:'neutral',
+  hair:1, eyes:1, face:1, skin:1, top:1, bottom:1, shoes:1,
+  outfit:1, accessory:3, headAccessory:3, handAccessory:0, faceExpression:'neutral',
 };
 export type ResolvedAvatar = AvatarConfig & Required<Pick<AvatarConfig,'outfit'|'headAccessory'|'handAccessory'|'faceExpression'>>;
 const expressions: CharacterExpression[] = ['neutral','happy','crying','sad','frowning','stoic'];
@@ -16,7 +16,7 @@ export function resolveAvatar(avatar: AvatarConfig): ResolvedAvatar {
   const hand = avatar.handAccessory ?? ([2,4,5].includes(legacy) ? legacy : 0);
   return {
     ...DEFAULT_AVATAR_CONFIG, ...avatar,
-    hair:variant(avatar.hair,2), outfit:variant(avatar.outfit ?? avatar.top,1),
+    hair:variant(avatar.hair,1), outfit:variant(avatar.outfit ?? avatar.top,1),
     headAccessory:([0,1,3].includes(head) ? head : 0) as 0|1|3,
     handAccessory:([0,2,4,5].includes(hand) ? hand : 0) as 0|2|4|5,
     faceExpression: expressions.includes(avatar.faceExpression!) ? avatar.faceExpression! : 'neutral',

@@ -163,7 +163,7 @@ export default function CalendarTab() {
   return <>
     <div className="eyebrow">ONE RECORD, ONE STEP CLOSER</div>
     <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
-      <div className="flex items-center gap-3"><CharacterAvatar avatar={appState.character.avatar} expression={mood.expression} className="h-14 w-14 shrink-0 rounded-full bg-[#f4ede0]"/><div><h1>캘린더<span className="text-forest">.</span></h1><p className="muted mt-2 text-sm">작은 기록이 모여, 든든한 내일이 돼요.</p></div></div>
+      <div className="flex items-center gap-3"><CharacterAvatar avatar={appState.character.avatar} expression={mood.expression} useDefaultArtwork={!appState.character.isCustomized} characterId={appState.character.selectedCharacterId} portrait className="h-14 w-14 shrink-0 rounded-full bg-[#f4ede0]"/><div><h1>캘린더<span className="text-forest">.</span></h1><p className="muted mt-2 text-sm">작은 기록이 모여, 든든한 내일이 돼요.</p></div></div>
       <button className="button-primary" onClick={() => setFormDate(selectedDate)}><Plus size={16}/>기록하기</button>
     </div>
     <div className="mt-7 flex flex-wrap items-center justify-between gap-3">

@@ -4,10 +4,11 @@ import { characterAtXp, HOUSE_STAGES } from '../lib/progression';
 import { getSettlementMissions, type BonusRewardType } from '../lib/XpSettlementEngine';
 import { applyQuotes, carryInvestmentsForward } from '../lib/investments';
 import { isValidDate, todayDate } from '../lib/calendar';
-import type { AppData, AvatarConfig, BudgetCode, Goal, InvestmentMonthly, MarketQuote, Transaction, XpLog } from '../types';
+import { DEFAULT_AVATAR_CONFIG } from '../lib/avatar';
+import type { AppData, AvatarConfig, BudgetCode, CharacterImageId, Goal, InvestmentMonthly, MarketQuote, Transaction, XpLog } from '../types';
 export const HOUSE_NAMES = HOUSE_STAGES.map(stage => stage.name);
 export const initialData: AppData = {
-  character: { totalXp: 0, level: 1, currentXp: 0, houseStage: 1, avatar: { hair: 1, eyes: 1, face: 1, skin: 1, top: 1, bottom: 1, shoes: 1 }, isCustomized: false },
+  character: { totalXp: 0, level: 1, currentXp: 0, houseStage: 1, avatar: {...DEFAULT_AVATAR_CONFIG}, isCustomized: false },
   budgetCodes: [ {codeId:'FO01',categoryName:'식비',monthlyLimit:400000}, {codeId:'SH01',categoryName:'쇼핑/뷰티',monthlyLimit:200000}, {codeId:'HO01',categoryName:'고정주거비',monthlyLimit:600000}, {codeId:'TR01',categoryName:'교통',monthlyLimit:100000}, {codeId:'LE01',categoryName:'문화/여가',monthlyLimit:150000} ],
   transactions: [], goals: [], investments: [], xpLogs: [],
 };
@@ -33,6 +34,8 @@ export interface SettlementResult {
   awarded: boolean; message: string; xpAmount: number; leveledUp: boolean; houseUpgraded: boolean;
 }
 interface Actions {
+  replaceAppData: (data: AppData) => void;
+  resetAppData: () => void;
   saveBudgetCode: (code: BudgetCode, originalId?: string) => void;
   deleteBudgetCode: (codeId: string) => void;
   saveGoal: (goal: Goal) => void;
@@ -44,12 +47,20 @@ interface Actions {
   ensureInvestmentMonth: () => void;
   updateInvestmentQuotes: (yearMonth: string, quotes: MarketQuote[]) => void;
   customizeAvatar: (avatar: AvatarConfig) => void;
+  selectCharacter: (id: CharacterImageId) => void;
   awardXp: (log: XpLog) => boolean;
   claimSettlement: (type: BonusRewardType) => SettlementResult;
 }
-// Data-only snapshot is the boundary for a future Firebase repository adapter.
+// The live app loads/saves this snapshot through authenticated server APIs. Browser
+// persistence remains enabled only for the existing isolated unit/E2E fixtures.
+const fixtureStorage = typeof window === 'undefined' || (import.meta.env?.DEV && import.meta.env?.VITE_E2E_AUTH_BYPASS === '1');
+const storage = fixtureStorage ? createJSONStorage<AppData>(() => localStorage) : {
+  getItem: () => null, setItem: () => undefined, removeItem: () => undefined,
+};
 export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
   ...structuredClone(initialData),
+  replaceAppData: data => set(migrateAppData(data,2)),
+  resetAppData: () => set(structuredClone(initialData)),
   saveBudgetCode: (input, originalId) => {
     const code = {...input, codeId: input.codeId.trim().toUpperCase(), categoryName: input.categoryName.trim()};
     if (!/^[A-Z][A-Z0-9]{1,11}$/.test(code.codeId) || ['INCOME','SAVING'].includes(code.codeId)) throw new Error('코드는 영문으로 시작하는 영문·숫자 2~12자로 입력해 주세요.');
@@ -121,7 +132,11 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
       return Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 5;
     });
     if (!validBase || !validOptional) throw new Error('아바타 설정이 올바르지 않습니다.');
-    set(s => ({character:{...s.character,avatar:{...avatar},isCustomized:true}}));
+    set(s => ({character:{...s.character,avatar:{...avatar},isCustomized:true,selectedCharacterId:undefined}}));
+  },
+  selectCharacter: id => {
+    if (!['default','saver','crying','duck','pink'].includes(id)) throw new Error('선택할 수 없는 캐릭터예요.');
+    set(s => ({character:{...s.character,selectedCharacterId:id,isCustomized:true}}));
   },
   claimSettlement: type => {
     const date = todayDate();
@@ -146,4 +161,4 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
       return {xpLogs:[...s.xpLogs,{...log}],character:growCharacter(s.character, log.xpAmount)};
     }); return true;
   },
-}), {name:'rich-grandma-tycoon-v1',version:2,storage:createJSONStorage(() => localStorage),migrate: (saved, version) => migrateAppData(saved as Partial<AppData>, version),merge: (saved, current) => ({...current, ...migrateAppData((saved ?? {}) as Partial<AppData>, 2)}),partialize: s => ({character:s.character,budgetCodes:s.budgetCodes,transactions:s.transactions,goals:s.goals,investments:s.investments,xpLogs:s.xpLogs})}));
+}), {name:'rich-grandma-tycoon-v1',version:2,storage,migrate: (saved, version) => migrateAppData(saved as Partial<AppData>, version),merge: (saved, current) => ({...current, ...migrateAppData((saved ?? {}) as Partial<AppData>, 2)}),partialize: s => ({character:s.character,budgetCodes:s.budgetCodes,transactions:s.transactions,goals:s.goals,investments:s.investments,xpLogs:s.xpLogs})}));

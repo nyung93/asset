@@ -1,4 +1,5 @@
 export type FiveVariant = 1 | 2 | 3 | 4 | 5;
+export type CharacterImageId = 'default' | 'saver' | 'crying' | 'duck' | 'pink';
 export interface AvatarConfig {
   hair: FiveVariant; eyes: FiveVariant; face: FiveVariant; skin: FiveVariant; top: FiveVariant; bottom: FiveVariant; shoes: 1 | 2 | 3;
   /** New clay-asset selections are optional so existing persisted SVG avatars remain readable. */
@@ -9,7 +10,7 @@ export interface AvatarConfig {
   handAccessory?: 0 | 2 | 4 | 5;
   faceExpression?: CharacterExpression;
 }
-export interface CharacterState { totalXp: number; level: number; currentXp: number; houseStage: FiveVariant; avatar: AvatarConfig; isCustomized: boolean }
+export interface CharacterState { totalXp: number; level: number; currentXp: number; houseStage: FiveVariant; avatar: AvatarConfig; isCustomized: boolean; selectedCharacterId?: CharacterImageId }
 export interface BudgetCode { codeId: string; categoryName: string; monthlyLimit: number }
 export interface Transaction { txId: string; txDate: string; type: 'INCOME' | 'EXPENSE' | 'SAVING'; codeId: string; amount: number; memo: string }
 export interface Goal { year: number; month: number; targetSavingAmount: number; targetInvestReturnRate: number }

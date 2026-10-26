@@ -153,3 +153,17 @@ test('avatar customization persists all variants and rejects out-of-range parts'
  assert.throws(()=>s.customizeAvatar({...avatar,hair:0} as never));
  assert.deepEqual(useAppStore.getState().character.avatar,avatar);
 });
+test('complete character choices persist without changing money records or XP',()=>{
+ const s=useAppStore.getState();
+ s.saveTransaction({txId:'one',txDate:'2026-10-01',type:'EXPENSE',codeId:'FO01',amount:1000,memo:'점심'});
+ const before=useAppStore.getState();
+ s.selectCharacter('saver');
+ assert.equal(useAppStore.getState().character.selectedCharacterId,'saver');
+ assert.equal(useAppStore.getState().character.isCustomized,true);
+ s.selectCharacter('default');
+ useAppStore.persist.rehydrate();
+ assert.equal(useAppStore.getState().character.selectedCharacterId,'default');
+ assert.deepEqual(useAppStore.getState().transactions,before.transactions);
+ assert.equal(useAppStore.getState().character.totalXp,before.character.totalXp);
+ assert.throws(()=>s.selectCharacter('unknown' as never));
+});
