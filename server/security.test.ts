@@ -5,7 +5,7 @@ import type {IncomingMessage,ServerResponse} from 'node:http';
 import {Readable} from 'node:stream';
 import {decryptField,encryptField,hashPassword,normalizeUsername,passwordRule,usernameLookup,verifyPassword} from './security';
 import {handleRequest} from './handler';
-import api from '../api/index';
+import api from './vercelEntry';
 
 process.env.FIELD_ENCRYPTION_KEY=randomBytes(32).toString('base64');
 
