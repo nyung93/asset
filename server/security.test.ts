@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
+import type {IncomingMessage,ServerResponse} from 'node:http';
+import {Readable} from 'node:stream';
 import {decryptField,encryptField,hashPassword,normalizeUsername,passwordRule,usernameLookup,verifyPassword} from './security';
 import {handleRequest} from './handler';
 import api from '../api/index';
@@ -28,9 +30,19 @@ test('password requirements and one-way scrypt verification',async()=>{
 });
 
 test('API fails closed without database and rejects cross-origin mutations',async()=>{
-  assert.equal(typeof api.fetch,'function');
   const status=await handleRequest(new Request('https://example.com/api/index?action=status'));
   assert.equal(status.status,503);
   const forged=await handleRequest(new Request('https://example.com/api/index?action=register',{method:'POST',headers:{origin:'https://attacker.example','content-type':'application/json'},body:'{}'}));
   assert.equal(forged.status,403);
+});
+
+test('Vercel Node entry point sends a JSON response without database configuration',async()=>{
+  const request=Object.assign(Readable.from([]),{
+    method:'GET',url:'/api/index?action=status',headers:{host:'example.com'},
+  }) as unknown as IncomingMessage;
+  let body='';
+  const response={statusCode:200,setHeader:()=>undefined,end:(chunk:Buffer)=>{body=chunk.toString();}} as unknown as ServerResponse;
+  await api(request,response);
+  assert.equal(response.statusCode,503);
+  assert.equal(JSON.parse(body).code,'setup_required');
 });
