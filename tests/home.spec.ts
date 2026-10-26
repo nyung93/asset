@@ -17,10 +17,12 @@ test('bonuses upgrade houses, animate level-up and remain claimed after reload',
   });
   await page.getByRole('button',{name:'이번 달 예산 지킴이 XP 받기',exact:true}).click();
   await expect(page.getByTestId('my-room')).toHaveAttribute('data-stage','2');
+  await expect(page.getByTestId('room-background')).toHaveAttribute('src',/room-stage-2\.png/);
   await expect(page.getByText('새 집으로 이사했어요! Lv.6',{exact:true})).toBeVisible();
   await expect(page.locator('.confetti-layer span')).toHaveCount(32);
   for(const title of ['차곡차곡 저축 달성','이번 달 투자 목표 달성','올해의 부자 습관 완성']) await page.getByRole('button',{name:`${title} XP 받기`,exact:true}).click();
   await expect(page.getByTestId('my-room')).toHaveAttribute('data-stage','3');
+  await expect(page.getByTestId('room-background')).toHaveAttribute('src',/room-stage-3\.png/);
   await expect(page.getByTestId('room-avatar')).toHaveAttribute('data-expression','happy');
   const state=await page.evaluate(()=>JSON.parse(localStorage.getItem('rich-grandma-tycoon-v1')!).state);
   expect(state.character.totalXp).toBe(2000);expect(state.character.level).toBe(16);expect(state.xpLogs).toHaveLength(4);
@@ -35,7 +37,8 @@ test('every housing stage renders, including the mansion maximum and migration',
   for(const [totalXp,stage] of [[0,1],[500,2],[2000,3],[5000,4],[10000,5]]) {
     await seed(page,{character:{...character,totalXp,avatar:{hair:3,eyes:5,face:5,skin:2,top:5,bottom:5,shoes:2}}});
     await expect(page.getByTestId('my-room')).toHaveAttribute('data-stage',String(stage));
-    if(stage>=4) await expect(page.getByTestId('room-chandelier')).toBeVisible();
+    await expect(page.getByTestId('room-background')).toHaveAttribute('src',new RegExp(`room-stage-${stage}\\.png`));
+    await expect(page.getByTestId('room-background')).toHaveJSProperty('naturalWidth',stage===1 ? 1408 : 1200);
     if(stage===5) await expect(page.getByRole('progressbar',{name:'다음 집 업그레이드 진행률'})).toHaveAttribute('aria-valuenow','100');
     await page.getByTestId('my-room').screenshot({path:testInfo.outputPath(`room-stage-${stage}.png`),animations:'disabled'});
   }

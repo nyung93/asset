@@ -28,7 +28,7 @@ export default function HomeTab({onNavigate}: {onNavigate: (tab: number) => void
   useEffect(() => {if (!celebration) return;const timer = window.setTimeout(() => setCelebration(null), 4500);return () => window.clearTimeout(timer);}, [celebration]);
   const month = today.slice(0, 7);
   const growth = progression(character.totalXp);
-  const nextHouse = HOUSE_STAGES.find(house => house.stage === character.houseStage + 1);
+  const nextHouse = HOUSE_STAGES.find(house => house.stage === growth.houseStage + 1);
   const missions = useMemo(() => getSettlementMissions(state, today), [state, today]);
   const mood = useMemo(() => getCharacterMood(state, today), [state, today]);
   const availableXp = missions.filter(mission => mission.eligible && !mission.claimed).reduce((sum, mission) => sum + mission.xpAmount, 0);
@@ -47,20 +47,20 @@ export default function HomeTab({onNavigate}: {onNavigate: (tab: number) => void
     <div className="eyebrow">GROW A LITTLE, DREAM A LITTLE BIGGER</div>
     <div className="mt-3 flex flex-wrap items-end justify-between gap-3"><div><h1>나의 마이룸<span className="text-forest">.</span></h1><p className="mt-2 text-sm text-stone-500">오늘의 작은 실천으로, 내일의 집을 키워요.</p></div><span className="rounded-full border border-[#dce3cc] bg-[#edf1e4] px-3 py-1.5 text-[11px] font-semibold text-forest">누적 {formatWon(character.totalXp)} XP</span></div>
     <section className="card mt-6 !p-0 overflow-hidden" aria-labelledby="house-title">
-      <div className="px-5 pb-4 pt-5 sm:px-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 id="house-title" className="text-base font-bold sm:text-lg"><span className="mr-2 text-forest">Lv.{character.level}</span>{growth.house.name}</h2><span className="text-[9px] font-semibold tracking-[2px] text-stone-400">STAGE 0{character.houseStage}</span></div>
+      <div className="px-5 pb-4 pt-5 sm:px-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 id="house-title" className="text-base font-bold sm:text-lg"><span className="mr-2 text-forest">Lv.{character.level}</span>{growth.house.name}</h2><span className="text-[9px] font-semibold tracking-[2px] text-stone-400">STAGE 0{growth.houseStage}</span></div>
         <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-100" role="progressbar" aria-label="다음 집 업그레이드 진행률" aria-valuemin={0} aria-valuemax={100} aria-valuenow={growth.houseProgress} aria-valuetext={growth.remainingHouseXp ? `다음 집까지 ${growth.remainingHouseXp} XP` : '최고 단계 대저택 달성'}><div className="h-full rounded-full bg-[#8ca174] transition-[width] duration-500 motion-reduce:transition-none" style={{width: `${growth.houseProgress}%`}}/></div>
         <p className="mt-2 text-right text-[10px] text-stone-500">{growth.remainingHouseXp ? <>{nextHouse?.name}까지 <strong className="text-forest">{formatWon(growth.remainingHouseXp)} XP</strong></> : '돈 많은 할머니 달성! 나의 이야기는 계속돼요.'}</p>
       </div>
       <div className="relative bg-[#ebe9dc]">
         <div className="room-speech"><Sprout size={13}/><span>{celebration ? '야호! 오늘의 실천으로 한 뼘 더 자랐어!' : mood.message}</span></div>
-        <RoomIllustration stage={character.houseStage} avatar={character.avatar} isCustomized={character.isCustomized} characterId={character.selectedCharacterId} expression={celebration ? 'happy' : mood.expression}/>
+        <RoomIllustration stage={growth.houseStage} avatar={character.avatar} isCustomized={character.isCustomized} characterId={character.selectedCharacterId} expression={celebration ? 'happy' : mood.expression}/>
         {celebration && <><Confetti id={celebration.id}/><div className="level-celebration" role="status"><Sparkles size={20}/><span>{celebration.title}</span></div></>}
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"><span className="text-xs text-stone-500">마음에 드는 캐릭터를 골라 언제든 바꿀 수 있어요.</span><button className="button-secondary" onClick={() => setPickerOpen(true)}><Shirt size={16}/>캐릭터 고르기</button></div>
     </section>
     <div className="mt-4 grid grid-cols-5 gap-1.5" aria-label="집 성장 단계">
-      {HOUSE_STAGES.map(house => <div key={house.stage} aria-current={house.stage === character.houseStage ? 'step' : undefined} className={`rounded-lg border px-1 py-3 text-center ${house.stage <= character.houseStage ? 'border-[#dce3cf] bg-[#eef2e6]' : 'border-stone-200 bg-white text-stone-400'}`}>
-        {house.stage <= character.houseStage ? <House size={16} className="mx-auto text-forest"/> : <LockKeyhole size={14} className="mx-auto"/>}<p className="mt-1.5 text-[9px] font-semibold">{['원룸','오피스텔','투룸 아파트','펜트하우스','대저택'][house.stage - 1]}</p><p className="mt-1 text-[8px] text-stone-400">{formatWon(house.minXp)} XP</p>
+      {HOUSE_STAGES.map(house => <div key={house.stage} aria-current={house.stage === growth.houseStage ? 'step' : undefined} className={`rounded-lg border px-1 py-3 text-center ${house.stage <= growth.houseStage ? 'border-[#dce3cf] bg-[#eef2e6]' : 'border-stone-200 bg-white text-stone-400'}`}>
+        {house.stage <= growth.houseStage ? <House size={16} className="mx-auto text-forest"/> : <LockKeyhole size={14} className="mx-auto"/>}<p className="mt-1.5 text-[9px] font-semibold">{['반지하','오피스텔','투룸 아파트','펜트하우스','대저택'][house.stage - 1]}</p><p className="mt-1 text-[8px] text-stone-400">{formatWon(house.minXp)} XP</p>
       </div>)}
     </div>
     <section className="mt-6 grid gap-3 sm:grid-cols-2" aria-label="이번 달 활동 요약">
