@@ -1,0 +1,46 @@
+{
+  "kospi_200": [
+    { "name": "삼성전자", "ticker": "005930.KS", "market": "KOSPI" },
+    { "name": "SK하이닉스", "ticker": "000660.KS", "market": "KOSPI" },
+    { "name": "LG에너지솔루션", "ticker": "373220.KS", "market": "KOSPI" },
+    { "name": "삼성바이오로직스", "ticker": "207940.KS", "market": "KOSPI" },
+    { "name": "현대차", "ticker": "005380.KS", "market": "KOSPI" },
+    { "name": "기아", "ticker": "000270.KS", "market": "KOSPI" },
+    { "name": "셀트리온", "ticker": "068270.KS", "market": "KOSPI" },
+    { "name": "POSCO홀딩스", "ticker": "005490.KS", "market": "KOSPI" },
+    { "name": "NAVER", "ticker": "035420.KS", "market": "KOSPI" },
+    { "name": "카카오", "ticker": "035720.KS", "market": "KOSPI" },
+    { "name": "KB금융", "ticker": "105560.KS", "market": "KOSPI" },
+    { "name": "신한지주", "ticker": "055550.KS", "market": "KOSPI" }
+  ],
+  "nasdaq_100": [
+    { "name": "Apple (애플)", "ticker": "AAPL", "market": "NASDAQ" },
+    { "name": "Microsoft (마이크로소프트)", "ticker": "MSFT", "market": "NASDAQ" },
+    { "name": "NVIDIA (엔비디아)", "ticker": "NVDA", "market": "NASDAQ" },
+    { "name": "Tesla (테슬라)", "ticker": "TSLA", "market": "NASDAQ" },
+    { "name": "Amazon (아마존)", "ticker": "AMZN", "market": "NASDAQ" },
+    { "name": "Alphabet Class A (구글)", "ticker": "GOOGL", "market": "NASDAQ" },
+    { "name": "Meta (메타)", "ticker": "META", "market": "NASDAQ" },
+    { "name": "Broadcom (브로드컴)", "ticker": "AVGO", "market": "NASDAQ" },
+    { "name": "Costco (코스트코)", "ticker": "COST", "market": "NASDAQ" },
+    { "name": "Netflix (넷플릭스)", "ticker": "NFLX", "market": "NASDAQ" },
+    { "name": "TSMC", "ticker": "TSM", "market": "NYSE" }
+  ],
+  "top_etfs": [
+    { "name": "SPY (S&P 500 ETF)", "ticker": "SPY", "market": "ETF" },
+    { "name": "VOO (Vanguard S&P 500)", "ticker": "VOO", "market": "ETF" },
+    { "name": "QQQ (나스닥 100 ETF)", "ticker": "QQQ", "market": "ETF" },
+    { "name": "SCHD (미국 배당 다우존스)", "ticker": "SCHD", "market": "ETF" },
+    { "name": "JEPQ (나스닥 커버드콜)", "ticker": "JEPQ", "market": "ETF" },
+    { "name": "JEPI (S&P 500 커버드콜)", "ticker": "JEPI", "market": "ETF" },
+    { "name": "SOXX (미국 반도체 ETF)", "ticker": "SOXX", "market": "ETF" },
+    { "name": "TIGER 미국배당다우존스", "ticker": "458730.KS", "market": "ETF" },
+    { "name": "TIGER 미국테크TOP10 INDXX", "ticker": "381180.KS", "market": "ETF" }
+  ],
+  "commodities": [
+    { "name": "GLD (금 현물 ETF)", "ticker": "GLD", "market": "Commodity" },
+    { "name": "IAU (iShares 금 ETF)", "ticker": "IAU", "market": "Commodity" },
+    { "name": "KODEX 골드선물(H)", "ticker": "132030.KS", "market": "Commodity" },
+    { "name": "KRX 금현물", "ticker": "411060.KS", "market": "Commodity" }
+  ]
+}

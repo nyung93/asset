@@ -1,0 +1,191 @@
+[
+  {
+    "id": "body",
+    "width": 1024,
+    "height": 1536,
+    "transparent": 922572,
+    "visible": 650292
+  },
+  {
+    "id": "hair-1",
+    "width": 435,
+    "height": 500,
+    "transparent": 123331,
+    "visible": 94169
+  },
+  {
+    "id": "hair-2",
+    "width": 470,
+    "height": 410,
+    "transparent": 108275,
+    "visible": 84425
+  },
+  {
+    "id": "hair-3",
+    "width": 450,
+    "height": 460,
+    "transparent": 117546,
+    "visible": 89454
+  },
+  {
+    "id": "hair-4",
+    "width": 445,
+    "height": 435,
+    "transparent": 104294,
+    "visible": 89281
+  },
+  {
+    "id": "hair-5",
+    "width": 480,
+    "height": 500,
+    "transparent": 125761,
+    "visible": 114239
+  },
+  {
+    "id": "outfit-1",
+    "width": 350,
+    "height": 390,
+    "transparent": 46656,
+    "visible": 89844
+  },
+  {
+    "id": "outfit-2",
+    "width": 375,
+    "height": 405,
+    "transparent": 51068,
+    "visible": 100807
+  },
+  {
+    "id": "outfit-3",
+    "width": 363,
+    "height": 391,
+    "transparent": 46996,
+    "visible": 94937
+  },
+  {
+    "id": "outfit-4",
+    "width": 380,
+    "height": 420,
+    "transparent": 55459,
+    "visible": 104141
+  },
+  {
+    "id": "outfit-5",
+    "width": 405,
+    "height": 365,
+    "transparent": 51582,
+    "visible": 96243
+  },
+  {
+    "id": "shoes-1",
+    "width": 295,
+    "height": 175,
+    "transparent": 19717,
+    "visible": 31908
+  },
+  {
+    "id": "shoes-2",
+    "width": 280,
+    "height": 180,
+    "transparent": 21338,
+    "visible": 29062
+  },
+  {
+    "id": "shoes-3",
+    "width": 305,
+    "height": 180,
+    "transparent": 24241,
+    "visible": 30659
+  },
+  {
+    "id": "shoes-4",
+    "width": 300,
+    "height": 195,
+    "transparent": 25290,
+    "visible": 33210
+  },
+  {
+    "id": "shoes-5",
+    "width": 290,
+    "height": 150,
+    "transparent": 19419,
+    "visible": 24081
+  },
+  {
+    "id": "hood-5",
+    "width": 315,
+    "height": 310,
+    "transparent": 39499,
+    "visible": 58151
+  },
+  {
+    "id": "expression-neutral",
+    "width": 505,
+    "height": 240,
+    "transparent": 75672,
+    "visible": 45528
+  },
+  {
+    "id": "expression-happy",
+    "width": 529,
+    "height": 240,
+    "transparent": 74753,
+    "visible": 52207
+  },
+  {
+    "id": "expression-crying",
+    "width": 500,
+    "height": 285,
+    "transparent": 88353,
+    "visible": 54147
+  },
+  {
+    "id": "expression-sad",
+    "width": 529,
+    "height": 285,
+    "transparent": 102042,
+    "visible": 48723
+  },
+  {
+    "id": "expression-frowning",
+    "width": 510,
+    "height": 285,
+    "transparent": 87621,
+    "visible": 57729
+  },
+  {
+    "id": "accessory-1",
+    "width": 525,
+    "height": 405,
+    "transparent": 104768,
+    "visible": 107857
+  },
+  {
+    "id": "accessory-2",
+    "width": 420,
+    "height": 400,
+    "transparent": 66612,
+    "visible": 101388
+  },
+  {
+    "id": "accessory-3",
+    "width": 440,
+    "height": 450,
+    "transparent": 123274,
+    "visible": 74726
+  },
+  {
+    "id": "accessory-4",
+    "width": 490,
+    "height": 420,
+    "transparent": 102724,
+    "visible": 103076
+  },
+  {
+    "id": "accessory-5",
+    "width": 390,
+    "height": 470,
+    "transparent": 135808,
+    "visible": 47492
+  }
+]

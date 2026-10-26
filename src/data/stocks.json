@@ -1,0 +1,22 @@
+[
+  {"name":"삼성전자","ticker":"005930.KS","market":"KOSPI","currency":"KRW","aliases":["삼성","Samsung"]},
+  {"name":"SK하이닉스","ticker":"000660.KS","market":"KOSPI","currency":"KRW","aliases":["하이닉스","SK Hynix"]},
+  {"name":"현대자동차","ticker":"005380.KS","market":"KOSPI","currency":"KRW","aliases":["현대차","Hyundai"]},
+  {"name":"NAVER","ticker":"035420.KS","market":"KOSPI","currency":"KRW","aliases":["네이버"]},
+  {"name":"LG화학","ticker":"051910.KS","market":"KOSPI","currency":"KRW","aliases":["엘지화학","LG Chem"]},
+  {"name":"Apple Inc.","ticker":"AAPL","market":"NASDAQ","currency":"USD","aliases":["애플"]},
+  {"name":"Microsoft Corporation","ticker":"MSFT","market":"NASDAQ","currency":"USD","aliases":["마이크로소프트"]},
+  {"name":"NVIDIA Corporation","ticker":"NVDA","market":"NASDAQ","currency":"USD","aliases":["엔비디아"]},
+  {"name":"Amazon.com Inc.","ticker":"AMZN","market":"NASDAQ","currency":"USD","aliases":["아마존"]},
+  {"name":"Alphabet Inc. Class A","ticker":"GOOGL","market":"NASDAQ","currency":"USD","aliases":["구글","알파벳"]},
+  {"name":"Meta Platforms Inc.","ticker":"META","market":"NASDAQ","currency":"USD","aliases":["메타","페이스북"]},
+  {"name":"Tesla Inc.","ticker":"TSLA","market":"NASDAQ","currency":"USD","aliases":["테슬라"]},
+  {"name":"SPDR S&P 500 ETF Trust","ticker":"SPY","market":"ETF","currency":"USD","aliases":["에스앤피","S&P500"]},
+  {"name":"Invesco QQQ Trust","ticker":"QQQ","market":"ETF","currency":"USD","aliases":["나스닥100","큐큐큐"]},
+  {"name":"Vanguard S&P 500 ETF","ticker":"VOO","market":"ETF","currency":"USD","aliases":["뱅가드","S&P500"]},
+  {"name":"Vanguard Total Stock Market ETF","ticker":"VTI","market":"ETF","currency":"USD","aliases":["미국전체시장"]},
+  {"name":"iShares 20+ Year Treasury Bond ETF","ticker":"TLT","market":"ETF","currency":"USD","aliases":["미국장기국채"]},
+  {"name":"KODEX 200","ticker":"069500.KS","market":"ETF","currency":"KRW","aliases":["코덱스200","코스피200"]},
+  {"name":"TIGER 미국S&P500","ticker":"360750.KS","market":"ETF","currency":"KRW","aliases":["타이거","에스앤피500"]},
+  {"name":"SPDR Gold Shares","ticker":"GLD","market":"GOLD","currency":"USD","aliases":["금","골드","금ETF","Gold"]}
+]
