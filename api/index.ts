@@ -4,6 +4,7 @@ import type {IncomingMessage, ServerResponse} from 'node:http';
 // Load the application handler inside the request so an import failure returns JSON
 // instead of terminating the function without a response.
 export default async function handler(request:IncomingMessage,response:ServerResponse) {
+  let stage='request_adapter';
   try {
     const protocol=process.env.VERCEL==='1' || request.headers['x-forwarded-proto']==='https' ? 'https' : 'http';
     const host=request.headers.host ?? 'localhost';
@@ -19,8 +20,11 @@ export default async function handler(request:IncomingMessage,response:ServerRes
     }
     const webRequest=new Request(url,{method:request.method,headers,
       body:request.method === 'GET' || request.method === 'HEAD' ? undefined : Buffer.concat(chunks)});
+    stage='module_import';
     const {handleRequest}=await import('../server/handler');
+    stage='handle_request';
     const result=await handleRequest(webRequest);
+    stage='response_adapter';
     response.statusCode=result.status;
     result.headers.forEach((value,key)=>{if(key !== 'set-cookie') response.setHeader(key,value);});
     const cookies=result.headers.getSetCookie();
@@ -31,6 +35,6 @@ export default async function handler(request:IncomingMessage,response:ServerRes
     response.statusCode=503;
     response.setHeader('Cache-Control','no-store');
     response.setHeader('Content-Type','application/json; charset=utf-8');
-    response.end(JSON.stringify({error:'서버 연결을 준비하고 있어요.',code:'api_unavailable'}));
+    response.end(JSON.stringify({error:'서버 연결을 준비하고 있어요.',code:'api_unavailable',stage}));
   }
 }
