@@ -1,8 +1,8 @@
 import type {IncomingMessage, ServerResponse} from 'node:http';
+import {handleRequest} from '../server/handler';
 
 // Vite deployments use Vercel's standard Node function signature at /api/index.
-// Load the application handler inside the request so an import failure returns JSON
-// instead of terminating the function without a response.
+// Keep the application handler statically imported so Vercel bundles its dependencies.
 export default async function handler(request:IncomingMessage,response:ServerResponse) {
   let stage='request_adapter';
   try {
@@ -20,8 +20,6 @@ export default async function handler(request:IncomingMessage,response:ServerRes
     }
     const webRequest=new Request(url,{method:request.method,headers,
       body:request.method === 'GET' || request.method === 'HEAD' ? undefined : Buffer.concat(chunks)});
-    stage='module_import';
-    const {handleRequest}=await import('../server/handler');
     stage='handle_request';
     const result=await handleRequest(webRequest);
     stage='response_adapter';
