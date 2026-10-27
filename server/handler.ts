@@ -4,6 +4,7 @@ import {decryptField, encryptField, hashPassword, newToken, normalizeUsername, p
 import {GeminiRequestError, generateGemini} from './gemini';
 import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
 import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
+import {financeQuote} from './financeQuote';
 
 type Role = 'USER' | 'ADMIN';
 interface UserRow {
@@ -350,6 +351,7 @@ export async function handleRequest(req: Request): Promise<Response> {
   try {
     if (req.method !== 'GET' && req.method !== 'POST') throw new ApiError(405,'지원하지 않는 요청이에요.');
     if (req.method === 'POST') sameOrigin(req);
+    if (req.method === 'GET' && new URL(req.url).searchParams.get('action') === 'finance-quote') return await financeQuote(req);
     // Missing secrets fail closed; the app never falls back to shared browser data.
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY,'base64').length!==32) throw new ApiError(503,'Firebase 연결을 준비하고 있어요.','setup_required');
     const action = new URL(req.url).searchParams.get('action');

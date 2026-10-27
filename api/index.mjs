@@ -227,6 +227,149 @@ function parseReceiptResponse(text) {
   }
 }
 
+// src/data/stocks.json
+var stocks_default = [
+  { name: "\uC0BC\uC131\uC804\uC790", ticker: "005930.KS", market: "KOSPI", currency: "KRW", aliases: ["\uC0BC\uC131", "Samsung"] },
+  { name: "SK\uD558\uC774\uB2C9\uC2A4", ticker: "000660.KS", market: "KOSPI", currency: "KRW", aliases: ["\uD558\uC774\uB2C9\uC2A4", "SK Hynix"] },
+  { name: "\uD604\uB300\uC790\uB3D9\uCC28", ticker: "005380.KS", market: "KOSPI", currency: "KRW", aliases: ["\uD604\uB300\uCC28", "Hyundai"] },
+  { name: "NAVER", ticker: "035420.KS", market: "KOSPI", currency: "KRW", aliases: ["\uB124\uC774\uBC84"] },
+  { name: "LG\uD654\uD559", ticker: "051910.KS", market: "KOSPI", currency: "KRW", aliases: ["\uC5D8\uC9C0\uD654\uD559", "LG Chem"] },
+  { name: "Apple Inc.", ticker: "AAPL", market: "NASDAQ", currency: "USD", aliases: ["\uC560\uD50C"] },
+  { name: "Microsoft Corporation", ticker: "MSFT", market: "NASDAQ", currency: "USD", aliases: ["\uB9C8\uC774\uD06C\uB85C\uC18C\uD504\uD2B8"] },
+  { name: "NVIDIA Corporation", ticker: "NVDA", market: "NASDAQ", currency: "USD", aliases: ["\uC5D4\uBE44\uB514\uC544"] },
+  { name: "Amazon.com Inc.", ticker: "AMZN", market: "NASDAQ", currency: "USD", aliases: ["\uC544\uB9C8\uC874"] },
+  { name: "Alphabet Inc. Class A", ticker: "GOOGL", market: "NASDAQ", currency: "USD", aliases: ["\uAD6C\uAE00", "\uC54C\uD30C\uBCB3"] },
+  { name: "Meta Platforms Inc.", ticker: "META", market: "NASDAQ", currency: "USD", aliases: ["\uBA54\uD0C0", "\uD398\uC774\uC2A4\uBD81"] },
+  { name: "Tesla Inc.", ticker: "TSLA", market: "NASDAQ", currency: "USD", aliases: ["\uD14C\uC2AC\uB77C"] },
+  { name: "SPDR S&P 500 ETF Trust", ticker: "SPY", market: "ETF", currency: "USD", aliases: ["\uC5D0\uC2A4\uC564\uD53C", "S&P500"] },
+  { name: "Invesco QQQ Trust", ticker: "QQQ", market: "ETF", currency: "USD", aliases: ["\uB098\uC2A4\uB2E5100", "\uD050\uD050\uD050"] },
+  { name: "Vanguard S&P 500 ETF", ticker: "VOO", market: "ETF", currency: "USD", aliases: ["\uBC45\uAC00\uB4DC", "S&P500"] },
+  { name: "Vanguard Total Stock Market ETF", ticker: "VTI", market: "ETF", currency: "USD", aliases: ["\uBBF8\uAD6D\uC804\uCCB4\uC2DC\uC7A5"] },
+  { name: "iShares 20+ Year Treasury Bond ETF", ticker: "TLT", market: "ETF", currency: "USD", aliases: ["\uBBF8\uAD6D\uC7A5\uAE30\uAD6D\uCC44"] },
+  { name: "KODEX 200", ticker: "069500.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4200", "\uCF54\uC2A4\uD53C200"] },
+  { name: "TIGER \uBBF8\uAD6DS&P500", ticker: "360750.KS", market: "ETF", currency: "KRW", aliases: ["\uD0C0\uC774\uAC70", "\uC5D0\uC2A4\uC564\uD53C500"] },
+  { name: "KODEX \uBBF8\uAD6DS&P500", ticker: "379800.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 \uBBF8\uAD6DS&P500", "\uCF54\uB371\uC2A4 \uC5D0\uC2A4\uC564\uD53C500"] },
+  { name: "ACE \uBBF8\uAD6DS&P500", ticker: "360200.KS", market: "ETF", currency: "KRW", aliases: ["\uC5D0\uC774\uC2A4 \uBBF8\uAD6DS&P500", "ACE \uC5D0\uC2A4\uC564\uD53C500"] },
+  { name: "RISE \uBBF8\uAD6DS&P500", ticker: "379780.KS", market: "ETF", currency: "KRW", aliases: ["\uB77C\uC774\uC988 \uBBF8\uAD6DS&P500", "RISE \uC5D0\uC2A4\uC564\uD53C500"] },
+  { name: "TIGER \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", ticker: "133690.KS", market: "ETF", currency: "KRW", aliases: ["\uD0C0\uC774\uAC70 \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", "TIGER \uB098\uC2A4\uB2E5100"] },
+  { name: "KODEX \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", ticker: "379810.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", "KODEX \uB098\uC2A4\uB2E5100"] },
+  { name: "ACE \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", ticker: "367380.KS", market: "ETF", currency: "KRW", aliases: ["\uC5D0\uC774\uC2A4 \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", "ACE \uB098\uC2A4\uB2E5100"] },
+  { name: "RISE \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", ticker: "368590.KS", market: "ETF", currency: "KRW", aliases: ["\uB77C\uC774\uC988 \uBBF8\uAD6D\uB098\uC2A4\uB2E5100", "RISE \uB098\uC2A4\uB2E5100"] },
+  { name: "TIGER \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", ticker: "458730.KS", market: "ETF", currency: "KRW", aliases: ["\uD0C0\uC774\uAC70 \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", "\uD0C0\uC774\uAC70 \uBC30\uB2F9"] },
+  { name: "KODEX \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", ticker: "489250.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", "\uCF54\uB371\uC2A4 \uBC30\uB2F9"] },
+  { name: "ACE \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", ticker: "402970.KS", market: "ETF", currency: "KRW", aliases: ["\uC5D0\uC774\uC2A4 \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", "\uC5D0\uC774\uC2A4 \uBC30\uB2F9"] },
+  { name: "SOL \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", ticker: "446720.KS", market: "ETF", currency: "KRW", aliases: ["\uC194 \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", "SOL \uBC30\uB2F9"] },
+  { name: "ACE KRX\uAE08\uD604\uBB3C", ticker: "411060.KS", market: "ETF", currency: "KRW", aliases: ["\uC5D0\uC774\uC2A4 KRX\uAE08\uD604\uBB3C", "ACE \uAE08\uD604\uBB3C", "\uAD6D\uB0B4 \uAE08 ETF"] },
+  { name: "TIGER KRX\uAE08\uD604\uBB3C", ticker: "0072R0.KS", market: "ETF", currency: "KRW", aliases: ["\uD0C0\uC774\uAC70 KRX\uAE08\uD604\uBB3C", "TIGER \uAE08\uD604\uBB3C", "\uAD6D\uB0B4 \uAE08 ETF"] },
+  { name: "SOL AI\uBC18\uB3C4\uCCB4TOP2\uD50C\uB7EC\uC2A4", ticker: "0167A0.KS", market: "ETF", currency: "KRW", aliases: ["SOL TOP2", "\uC194 \uBC18\uB3C4\uCCB4 TOP2", "SOL \uBC18\uB3C4\uCCB4 TOP2"] },
+  { name: "KODEX AI\uBC18\uB3C4\uCCB4TOP2\uD50C\uB7EC\uC2A4", ticker: "395160.KS", market: "ETF", currency: "KRW", aliases: ["KODEX TOP2", "\uCF54\uB371\uC2A4 \uBC18\uB3C4\uCCB4 TOP2", "\uCF54\uB371\uC2A4 AI\uBC18\uB3C4\uCCB4 TOP2"] },
+  { name: "ACE K\uBC18\uB3C4\uCCB4TOP2+", ticker: "0210A0.KS", market: "ETF", currency: "KRW", aliases: ["ACE TOP2", "\uC5D0\uC774\uC2A4 \uBC18\uB3C4\uCCB4 TOP2", "ACE K\uBC18\uB3C4\uCCB4 TOP2"] },
+  { name: "TIGER \uBC18\uB3C4\uCCB4TOP10", ticker: "396500.KS", market: "ETF", currency: "KRW", aliases: ["\uD0C0\uC774\uAC70 \uBC18\uB3C4\uCCB4 TOP10", "TIGER \uBC18\uB3C4\uCCB4 TOP10"] },
+  { name: "TIGER \uBBF8\uAD6D\uD544\uB77C\uB378\uD53C\uC544\uBC18\uB3C4\uCCB4\uB098\uC2A4\uB2E5", ticker: "381180.KS", market: "ETF", currency: "KRW", aliases: ["\uD0C0\uC774\uAC70 \uBBF8\uAD6D\uD544\uB77C\uB378\uD53C\uC544\uBC18\uB3C4\uCCB4", "\uD544\uB77C\uB378\uD53C\uC544 \uBC18\uB3C4\uCCB4"] },
+  { name: "KODEX TRF3070", ticker: "329650.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 TRF3070", "TRF 3070"] },
+  { name: "KODEX TRF5050", ticker: "329660.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 TRF5050", "TRF 5050"] },
+  { name: "KODEX TRF7030", ticker: "329670.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 TRF7030", "TRF 7030"] },
+  { name: "KODEX \uACE0\uBC30\uB2F9\uC8FC", ticker: "279530.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 \uACE0\uBC30\uB2F9\uC8FC", "KODEX \uACE0\uBC30\uB2F9"] },
+  { name: "PLUS \uACE0\uBC30\uB2F9\uC8FC", ticker: "161510.KS", market: "ETF", currency: "KRW", aliases: ["\uD50C\uB7EC\uC2A4 \uACE0\uBC30\uB2F9\uC8FC", "PLUS \uACE0\uBC30\uB2F9"] },
+  { name: "KODEX \uAD6D\uACE0\uCC443\uB144", ticker: "114260.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 \uAD6D\uACE0\uCC443\uB144", "\uAD6D\uACE0\uCC44 3\uB144"] },
+  { name: "KODEX CD\uAE08\uB9AC\uC561\uD2F0\uBE0C(\uD569\uC131)", ticker: "459580.KS", market: "ETF", currency: "KRW", aliases: ["\uCF54\uB371\uC2A4 CD\uAE08\uB9AC\uC561\uD2F0\uBE0C", "KODEX CD\uAE08\uB9AC", "CD \uAE08\uB9AC"] },
+  { name: "SPDR Gold Shares", ticker: "GLD", market: "GOLD", currency: "USD", aliases: ["\uAE08", "\uACE8\uB4DC", "\uAE08ETF", "Gold"] }
+];
+
+// src/stocks.json
+var stocks_default2 = {
+  kospi_200: [
+    { name: "\uC0BC\uC131\uC804\uC790", ticker: "005930.KS", market: "KOSPI" },
+    { name: "SK\uD558\uC774\uB2C9\uC2A4", ticker: "000660.KS", market: "KOSPI" },
+    { name: "LG\uC5D0\uB108\uC9C0\uC194\uB8E8\uC158", ticker: "373220.KS", market: "KOSPI" },
+    { name: "\uC0BC\uC131\uBC14\uC774\uC624\uB85C\uC9C1\uC2A4", ticker: "207940.KS", market: "KOSPI" },
+    { name: "\uD604\uB300\uCC28", ticker: "005380.KS", market: "KOSPI" },
+    { name: "\uAE30\uC544", ticker: "000270.KS", market: "KOSPI" },
+    { name: "\uC140\uD2B8\uB9AC\uC628", ticker: "068270.KS", market: "KOSPI" },
+    { name: "POSCO\uD640\uB529\uC2A4", ticker: "005490.KS", market: "KOSPI" },
+    { name: "NAVER", ticker: "035420.KS", market: "KOSPI" },
+    { name: "\uCE74\uCE74\uC624", ticker: "035720.KS", market: "KOSPI" },
+    { name: "KB\uAE08\uC735", ticker: "105560.KS", market: "KOSPI" },
+    { name: "\uC2E0\uD55C\uC9C0\uC8FC", ticker: "055550.KS", market: "KOSPI" }
+  ],
+  nasdaq_100: [
+    { name: "Apple (\uC560\uD50C)", ticker: "AAPL", market: "NASDAQ" },
+    { name: "Microsoft (\uB9C8\uC774\uD06C\uB85C\uC18C\uD504\uD2B8)", ticker: "MSFT", market: "NASDAQ" },
+    { name: "NVIDIA (\uC5D4\uBE44\uB514\uC544)", ticker: "NVDA", market: "NASDAQ" },
+    { name: "Tesla (\uD14C\uC2AC\uB77C)", ticker: "TSLA", market: "NASDAQ" },
+    { name: "Amazon (\uC544\uB9C8\uC874)", ticker: "AMZN", market: "NASDAQ" },
+    { name: "Alphabet Class A (\uAD6C\uAE00)", ticker: "GOOGL", market: "NASDAQ" },
+    { name: "Meta (\uBA54\uD0C0)", ticker: "META", market: "NASDAQ" },
+    { name: "Broadcom (\uBE0C\uB85C\uB4DC\uCEF4)", ticker: "AVGO", market: "NASDAQ" },
+    { name: "Costco (\uCF54\uC2A4\uD2B8\uCF54)", ticker: "COST", market: "NASDAQ" },
+    { name: "Netflix (\uB137\uD50C\uB9AD\uC2A4)", ticker: "NFLX", market: "NASDAQ" },
+    { name: "TSMC", ticker: "TSM", market: "NYSE" }
+  ],
+  top_etfs: [
+    { name: "SPY (S&P 500 ETF)", ticker: "SPY", market: "ETF" },
+    { name: "VOO (Vanguard S&P 500)", ticker: "VOO", market: "ETF" },
+    { name: "QQQ (\uB098\uC2A4\uB2E5 100 ETF)", ticker: "QQQ", market: "ETF" },
+    { name: "SCHD (\uBBF8\uAD6D \uBC30\uB2F9 \uB2E4\uC6B0\uC874\uC2A4)", ticker: "SCHD", market: "ETF" },
+    { name: "JEPQ (\uB098\uC2A4\uB2E5 \uCEE4\uBC84\uB4DC\uCF5C)", ticker: "JEPQ", market: "ETF" },
+    { name: "JEPI (S&P 500 \uCEE4\uBC84\uB4DC\uCF5C)", ticker: "JEPI", market: "ETF" },
+    { name: "SOXX (\uBBF8\uAD6D \uBC18\uB3C4\uCCB4 ETF)", ticker: "SOXX", market: "ETF" },
+    { name: "TIGER \uBBF8\uAD6D\uBC30\uB2F9\uB2E4\uC6B0\uC874\uC2A4", ticker: "458730.KS", market: "ETF" },
+    { name: "TIGER \uBBF8\uAD6D\uD14C\uD06CTOP10 INDXX", ticker: "381170.KS", market: "ETF" }
+  ],
+  commodities: [
+    { name: "GLD (\uAE08 \uD604\uBB3C ETF)", ticker: "GLD", market: "Commodity" },
+    { name: "IAU (iShares \uAE08 ETF)", ticker: "IAU", market: "Commodity" },
+    { name: "KODEX \uACE8\uB4DC\uC120\uBB3C(H)", ticker: "132030.KS", market: "Commodity" },
+    { name: "ACE KRX\uAE08\uD604\uBB3C", ticker: "411060.KS", market: "Commodity" }
+  ]
+};
+
+// src/utils/financeApi.ts
+function parseYahooQuote(payload, ticker) {
+  const data = payload;
+  const meta = data?.chart?.result?.[0]?.meta;
+  if (data?.chart?.error || !meta) throw new Error("Yahoo \uC2DC\uC138 \uC751\uB2F5\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.");
+  const price = meta.regularMarketPrice;
+  const timestamp = meta.regularMarketTime;
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) throw new Error("\uC720\uD6A8\uD55C \uD604\uC7AC\uAC00\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.");
+  if (meta.symbol !== ticker || !["KRW", "USD"].includes(String(meta.currency))) throw new Error("\uC885\uBAA9 \uB610\uB294 \uD1B5\uD654\uAC00 \uC77C\uCE58\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.");
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp) || timestamp <= 0) throw new Error("\uC2DC\uC138 \uAE30\uC900 \uC2DC\uAC04\uC774 \uC5C6\uC2B5\uB2C8\uB2E4.");
+  const date = new Date(timestamp * 1e3);
+  if (!Number.isFinite(date.getTime()) || date.getTime() > Date.now() + 3e5) throw new Error("\uC2DC\uC138 \uAE30\uC900 \uC2DC\uAC04\uC774 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.");
+  return { ticker, price, currency: meta.currency, marketTime: date.toISOString(), fetchedAt: (/* @__PURE__ */ new Date()).toISOString() };
+}
+
+// server/financeQuote.ts
+var allowedTickers = /* @__PURE__ */ new Set([
+  ...stocks_default.map((stock) => stock.ticker),
+  ...Object.values(stocks_default2).flat().map((stock) => stock.ticker),
+  "KRW=X"
+]);
+var cache = /* @__PURE__ */ new Map();
+var CACHE_MS = 3e4;
+async function financeQuote(req) {
+  const ticker = new URL(req.url).searchParams.get("ticker")?.trim().toUpperCase() ?? "";
+  const headers = { "Content-Type": "application/json; charset=utf-8", "X-Content-Type-Options": "nosniff" };
+  if (!allowedTickers.has(ticker)) return new Response(JSON.stringify({ error: "\uC9C0\uC6D0\uD558\uC9C0 \uC54A\uB294 \uC885\uBAA9\uCF54\uB4DC\uC608\uC694." }), { status: 400, headers });
+  const existing = cache.get(ticker);
+  if (existing && existing.expiresAt > Date.now()) {
+    return new Response(JSON.stringify(existing.payload), { status: 200, headers: { ...headers, "Cache-Control": "public, s-maxage=30" } });
+  }
+  for (const host of ["query1.finance.yahoo.com", "query2.finance.yahoo.com"]) {
+    try {
+      const url = `https://${host}/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+      const upstream = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(5e3) });
+      if (!upstream.ok) continue;
+      const payload = await upstream.json();
+      parseYahooQuote(payload, ticker);
+      cache.set(ticker, { payload, expiresAt: Date.now() + CACHE_MS });
+      return new Response(JSON.stringify(payload), { status: 200, headers: { ...headers, "Cache-Control": "public, s-maxage=30" } });
+    } catch {
+    }
+  }
+  return new Response(JSON.stringify({ error: "\uC2DC\uC138\uB97C \uAC00\uC838\uC624\uC9C0 \uBABB\uD588\uC5B4\uC694." }), { status: 502, headers: { ...headers, "Cache-Control": "no-store" } });
+}
+
 // server/handler.ts
 var ApiError = class extends Error {
   constructor(status, message, code = "request_failed") {
@@ -592,6 +735,7 @@ async function handleRequest(req) {
   try {
     if (req.method !== "GET" && req.method !== "POST") throw new ApiError(405, "\uC9C0\uC6D0\uD558\uC9C0 \uC54A\uB294 \uC694\uCCAD\uC774\uC5D0\uC694.");
     if (req.method === "POST") sameOrigin(req);
+    if (req.method === "GET" && new URL(req.url).searchParams.get("action") === "finance-quote") return await financeQuote(req);
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY, "base64").length !== 32) throw new ApiError(503, "Firebase \uC5F0\uACB0\uC744 \uC900\uBE44\uD558\uACE0 \uC788\uC5B4\uC694.", "setup_required");
     const action = new URL(req.url).searchParams.get("action");
     if (req.method === "POST" && action === "register") return await register(req, await body(req));

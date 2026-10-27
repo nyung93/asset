@@ -18,10 +18,9 @@ test('autocomplete, quantity-based valuation, currency totals, refresh and failu
  await page.clock.setFixedTime(now);
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  let apple=220;let samsung=55000;let failApple=false;
- await page.route(/(?:api\.allorigins\.win\/|\/api\/finance\/chart\/)/,async route=>{
+ await page.route(/\/api\/index\?action=finance-quote&ticker=/,async route=>{
   const requestUrl=new URL(route.request().url());
-  const upstream=requestUrl.searchParams.has('url') ? new URL(requestUrl.searchParams.get('url')!) : requestUrl;
-  const ticker=decodeURIComponent(upstream.pathname.split('/').at(-1)!);
+  const ticker=requestUrl.searchParams.get('ticker')!;
   if(ticker==='AAPL' && failApple) {await route.fulfill({status:503,body:'unavailable'});return;}
   const body={chart:{error:null,result:[{meta:{symbol:ticker,currency:ticker==='KRW=X'||ticker.endsWith('.KS')?'KRW':'USD',regularMarketPrice:ticker==='KRW=X'?1300:ticker==='AAPL'?apple:samsung,regularMarketTime:Math.floor(now.getTime()/1000)}}]}};
   await route.fulfill({json:body});
@@ -61,7 +60,7 @@ test('monthly snapshot carry-forward and percentage point comparison preserve hi
  await page.addInitScript(()=>{
   localStorage.setItem('rich-grandma-tycoon-v1',JSON.stringify({version:1,state:{investments:[{invId:'prev',yearMonth:'2026-09',tickerName:'Apple Inc.',ticker:'AAPL',currency:'USD',quantity:10,purchasePrice:200,investedPrincipal:2000,currentValuation:2100,lastPrice:210,quoteTime:'2026-09-30T20:00:00Z',fetchedAt:'2026-09-30T21:00:00Z',valuationSource:'market'}]}}));
  });
- await page.route(/(?:api\.allorigins\.win\/|\/api\/finance\/chart\/)/,route=>{const u=new URL(route.request().url());const upstream=u.searchParams.has('url')?new URL(u.searchParams.get('url')!):u;const ticker=decodeURIComponent(upstream.pathname.split('/').at(-1)!);return route.fulfill({json:{chart:{error:null,result:[{meta:{symbol:ticker,currency:ticker==='KRW=X'?'KRW':'USD',regularMarketPrice:ticker==='KRW=X'?1300:220,regularMarketTime:Math.floor(now.getTime()/1000)}}]}}});});
+ await page.route(/\/api\/index\?action=finance-quote&ticker=/,route=>{const u=new URL(route.request().url());const ticker=u.searchParams.get('ticker')!;return route.fulfill({json:{chart:{error:null,result:[{meta:{symbol:ticker,currency:ticker==='KRW=X'?'KRW':'USD',regularMarketPrice:ticker==='KRW=X'?1300:220,regularMarketTime:Math.floor(now.getTime()/1000)}}]}}});});
  await page.goto('/');await enterInvestments(page);
  await expect(page.getByRole('article').filter({hasText:'총 매수 원금'})).toContainText('₩2,600,000');
  await expect(page.getByRole('article').filter({hasText:'현재 총 평가금액'})).toContainText('₩2,860,000');
@@ -76,7 +75,7 @@ test('monthly snapshot carry-forward and percentage point comparison preserve hi
 });
 test('new holdings on API failure are explicitly unpriced until recovery',async({page})=>{
  await page.clock.setFixedTime(now);
- await page.route(/(?:api\.allorigins\.win\/|\/api\/finance\/chart\/)/,route=>route.fulfill({status:503,body:'unavailable'}));
+ await page.route(/\/api\/index\?action=finance-quote&ticker=/,route=>route.fulfill({status:503,body:'unavailable'}));
  await page.goto('/');await enterInvestments(page);await addStock(page,'애플','2000','10');
  const card=page.getByRole('region',{name:'보유 투자 종목'}).getByRole('article');
  await expect(card).toContainText('시세 미확인');
@@ -84,8 +83,10 @@ test('new holdings on API failure are explicitly unpriced until recovery',async(
  await expect(page.getByRole('article').filter({hasText:'총 매수 원금'})).toContainText('—');
  await expect(page.getByText('환율을 조회하지 못해 원화 합계를 표시할 수 없어요.')).toBeVisible();
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('rich-grandma-tycoon-v1')!).state.investments[0].currentValuation)).toBe(2000);
- await page.unroute(/(?:api\.allorigins\.win\/|\/api\/finance\/chart\/)/);
- await page.route(/(?:api\.allorigins\.win\/|\/api\/finance\/chart\/)/,route=>{const u=new URL(route.request().url());const upstream=u.searchParams.has('url')?new URL(u.searchParams.get('url')!):u;const ticker=decodeURIComponent(upstream.pathname.split('/').at(-1)!);return route.fulfill({json:{chart:{error:null,result:[{meta:{symbol:ticker,currency:ticker==='KRW=X'?'KRW':'USD',regularMarketPrice:ticker==='KRW=X'?1300:210,regularMarketTime:Math.floor(now.getTime()/1000)}}]}}});});
+ await page.unroute(/\/api\/index\?action=finance-quote&ticker=/);
+ await page.route(/\/api\/index\?action=finance-quote&ticker=/,route=>{const u=new URL(route.request().url());const ticker=u.searchParams.get('ticker')!;return route.fulfill({json:{chart:{error:null,result:[{meta:{symbol:ticker,currency:ticker==='KRW=X'?'KRW':'USD',regularMarketPrice:ticker==='KRW=X'?1300:210,regularMarketTime:Math.floor(now.getTime()/1000)}}]}}});});
+ await page.getByRole('button',{name:'환율 다시 조회'}).click();
+ await expect(page.getByRole('article').filter({hasText:'총 매수 원금'})).toContainText('₩2,600,000');
  await page.getByRole('button',{name:'시세 새로고침',exact:true}).click();
  await expect(card).toContainText('+5.00%');
  await expect(page.getByRole('article').filter({hasText:'현재 총 평가금액'})).toContainText('₩2,730,000');

@@ -3,7 +3,7 @@ import type { MarketQuote } from '../types';
 const cache = new Map<string, MarketQuote>();
 const inFlight = new Map<string, Promise<MarketQuote | null>>();
 const CACHE_MS = 30_000;
-const TIMEOUT_MS = 8_000;
+const TIMEOUT_MS = 12_000;
 interface PriceOptions { includeMetadata?: boolean; force?: boolean }
 
 /** Validates the unofficial Yahoo chart response; never treats a missing price as zero. */
@@ -22,33 +22,19 @@ export function parseYahooQuote(payload: unknown, ticker: string): MarketQuote {
 }
 
 async function requestQuote(ticker: string): Promise<MarketQuote | null> {
-  const yahooUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
-  // Public CORS proxy: both routes work in a static Vite build without a dev-server proxy.
-  // Only the public ticker URL is sent; principal and quantity stay in LocalStorage.
-  const routes: Array<'local' | 'raw' | 'get'> = import.meta.env?.DEV ? ['local', 'raw', 'get'] : ['raw', 'get'];
-  for (const route of routes) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
-    try {
-      const url = route === 'local' ? `/api/finance/chart/${encodeURIComponent(ticker)}` : `https://api.allorigins.win/${route}?url=${encodeURIComponent(yahooUrl)}`;
-      const response = await fetch(url, {
-        signal: controller.signal, credentials: 'omit', cache: 'no-store',
-      });
-      if (!response.ok) throw new Error(`시세 조회 실패 (${response.status})`);
-      const body: unknown = await response.json();
-      const wrapped = body as {contents?: unknown; status?: {http_code?: number}} | null;
-      if (route === 'get' && wrapped?.status?.http_code && wrapped.status.http_code >= 400) throw new Error('Yahoo 응답 오류');
-      const payload = route === 'get' && typeof wrapped?.contents === 'string' ? JSON.parse(wrapped.contents) : body;
-      const quote = parseYahooQuote(payload, ticker);
-      cache.set(ticker, quote);
-      return quote;
-    } catch {
-      // Try the alternate response route, then return null so callers preserve stored valuation.
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-  return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    // The same-origin server reads only a catalog ticker. Holdings never leave the browser.
+    const response = await fetch(`/api/index?action=finance-quote&ticker=${encodeURIComponent(ticker)}`, {
+      signal: controller.signal, credentials: 'same-origin', cache: 'no-store',
+    });
+    if (!response.ok) return null;
+    const quote = parseYahooQuote(await response.json(), ticker);
+    cache.set(ticker, quote);
+    return quote;
+  } catch {return null;}
+  finally {clearTimeout(timeout);}
 }
 
 /** Returns RegularMarketPrice, or null on failure. No fabricated fallback prices. */

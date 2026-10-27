@@ -16,17 +16,15 @@ test('USD/KRW quote uses KRW per dollar and keeps the market timestamp', () => {
  assert.equal(quote.currency,'KRW');
  assert.equal(quote.ticker,'KRW=X');
 });
-test('uses encoded public proxy URL and falls back to the wrapped response', async () => {
+test('uses the same-origin quote API and validates its Yahoo payload', async () => {
  const urls:string[]=[];
  globalThis.fetch=async input=>{
   const url=String(input);urls.push(url);
-  if(url.includes('/raw?')) return new Response('error',{status:502});
-  return Response.json({contents:JSON.stringify(payload('005930.KS',70000,'KRW')),status:{http_code:200}});
+  return Response.json(payload('005930.KS',70000,'KRW'));
  };
  const result=await fetchCurrentPrice('005930.KS',{includeMetadata:true,force:true});
- assert.equal(result?.price,70000);assert.equal(result?.currency,'KRW');assert.equal(urls.length,2);
- assert.ok(urls.every(url=>url.startsWith('https://api.allorigins.win/')));
- assert.equal(new URL(new URL(urls[0]).searchParams.get('url')!).pathname,'/v8/finance/chart/005930.KS');
+ assert.equal(result?.price,70000);assert.equal(result?.currency,'KRW');assert.equal(urls.length,1);
+ assert.deepEqual(urls,['/api/index?action=finance-quote&ticker=005930.KS']);
 });
 test('deduplicates concurrent requests and returns numeric price by default', async () => {
  let count=0;
@@ -38,7 +36,7 @@ test('deduplicates concurrent requests and returns numeric price by default', as
 test('network, malformed JSON and HTTP errors yield null, never a fake price', async () => {
  let count=0;
  globalThis.fetch=async()=>{count++;throw new Error('network');};
- assert.equal(await fetchCurrentPrice('TSLA',{force:true}),null);assert.equal(count,2);
+ assert.equal(await fetchCurrentPrice('TSLA',{force:true}),null);assert.equal(count,1);
  globalThis.fetch=async()=>new Response('<html>upstream error</html>');
  assert.equal(await fetchCurrentPrice('NVDA',{force:true}),null);
  globalThis.fetch=async()=>Response.json({contents:JSON.stringify(payload('META')),status:{http_code:429}});
