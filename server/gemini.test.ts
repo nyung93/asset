@@ -28,7 +28,7 @@ test('server sends key only in a header, constrained instructions and resized im
     assert.equal(body.systemInstruction.parts[0].text, input.systemPrompt);
     assert.equal(body.contents[0].parts[1].inlineData.data, input.imageBase64);
     assert.equal(body.generationConfig.responseMimeType, 'application/json');
-    assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+    assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, 'low');
     return answer('{"amount":1000}');
   };
   assert.equal(await generateGemini(input), '{"amount":1000}');
@@ -56,4 +56,34 @@ test('network failure, missing candidate and truncated answer have distinct erro
   await assert.rejects(generateGemini(input), (error: GeminiRequestError) => error.code === 'gemini_incomplete');
   globalThis.fetch = async () => answer('some text','MAX_TOKENS');
   await assert.rejects(generateGemini(input), (error: GeminiRequestError) => error.code === 'gemini_incomplete');
+});
+
+test('default Flash-Lite uses minimal thinking for quick text and image extraction', async () => {
+  process.env.GEMINI_API_KEY = 'server-test-key';
+  delete process.env.GEMINI_MODEL;
+  globalThis.fetch = async (url, init) => {
+    assert.match(String(url), /gemini-3\.5-flash-lite:generateContent$/);
+    assert.equal(JSON.parse(String(init?.body)).generationConfig.thinkingConfig.thinkingLevel, 'minimal');
+    return answer('👵🏻 이번 달은 좋구나\n💸 식비를 살펴보렴\n📈 투자도 차근차근');
+  };
+  assert.match(await generateGemini({systemPrompt:'three lines',prompt:'summary'}), /식비/);
+});
+
+test('timeout distinguishes a reachable model endpoint from a blocked Google connection', async () => {
+  process.env.GEMINI_API_KEY = 'server-test-key';
+  delete process.env.GEMINI_MODEL;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    if (calls === 1) return new Promise(() => {});
+    return Response.json({name:'models/gemini-3.5-flash-lite'});
+  };
+  await assert.rejects(generateGemini({...input,timeoutMs:10}), (error: GeminiRequestError) => error.code === 'gemini_generation_timeout');
+  calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    if (calls === 1) return new Promise(() => {});
+    throw new TypeError('Failed to fetch');
+  };
+  await assert.rejects(generateGemini({...input,timeoutMs:10}), (error: GeminiRequestError) => error.code === 'gemini_network_timeout');
 });

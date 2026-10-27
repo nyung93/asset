@@ -13,14 +13,16 @@ export async function generateGemini(input: {
   prompt: string;
   imageBase64?: string;
   json?: boolean;
+  timeoutMs?: number;
 }): Promise<string> {
   // The old VITE_ variable is accepted during migration, but a server-only key takes priority.
   const apiKey = process.env.GEMINI_API_KEY?.trim() || process.env.VITE_GEMINI_API_KEY?.trim();
   if (!apiKey) throw new GeminiRequestError(503, 'gemini_not_configured', 'AI 서버 키가 아직 설정되지 않았어요. 관리자에게 알려 주세요.');
-  const model = process.env.GEMINI_MODEL?.trim() || process.env.VITE_GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
+  const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite';
   if (!/^gemini-[a-z0-9.-]{1,60}$/i.test(model)) throw new GeminiRequestError(503, 'gemini_model_invalid', 'AI 모델 설정을 확인해 주세요.');
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 32_000);
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 45_000);
+  let stopWaiting: (() => void) | undefined;
   try {
     const parts: Array<{text: string} | {inlineData: {mimeType: string; data: string}}> = [{text: input.prompt}];
     if (input.imageBase64) parts.push({inlineData: {mimeType: 'image/jpeg', data: input.imageBase64}});
@@ -30,15 +32,20 @@ export async function generateGemini(input: {
       generationConfig: {
         maxOutputTokens: input.json ? 1024 : 2048,
         ...(input.json ? {responseMimeType: 'application/json'} : {}),
-        ...(model.startsWith('gemini-3.') ? {thinkingConfig: {thinkingLevel: 'LOW'}} : {}),
+        ...(model.startsWith('gemini-3.') ? {thinkingConfig: {thinkingLevel: model.includes('flash-lite') ? 'minimal' : 'low'}} : {}),
       },
     };
-    const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    const aborted = new Promise<never>((_, reject) => {
+      stopWaiting = () => reject(new Error('gemini-aborted'));
+      controller.signal.addEventListener('abort', stopWaiting, {once: true});
+      if (controller.signal.aborted) stopWaiting();
+    });
+    const upstream = await Promise.race([fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'x-goog-api-key': apiKey},
       body: JSON.stringify(payload),
       signal: controller.signal,
-    });
+    }), aborted]);
     if (!upstream.ok) {
       if (upstream.status === 401) throw new GeminiRequestError(503, 'gemini_key_invalid', 'Gemini API 키가 유효하지 않아요. Google AI Studio에서 확인해 주세요.');
       if (upstream.status === 402 || upstream.status === 403) throw new GeminiRequestError(503, 'gemini_access_denied', 'Gemini 프로젝트의 키 상태와 무료 사용 자격을 Google AI Studio에서 확인해 주세요.');
@@ -55,9 +62,26 @@ export async function generateGemini(input: {
     return result;
   } catch (error) {
     if (error instanceof GeminiRequestError) throw error;
-    if (controller.signal.aborted) throw new GeminiRequestError(504, 'gemini_timeout', 'AI 응답이 늦어지고 있어요. 잠시 뒤 다시 시도해 주세요.');
+    if (controller.signal.aborted) {
+      // A short, read-only model lookup distinguishes outbound connectivity from
+      // a slow generation request without returning any provider payload to users.
+      try {
+        const probe = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`, {
+          headers: {'x-goog-api-key': apiKey}, signal: AbortSignal.timeout(4_000),
+        });
+        if (probe.status === 401) throw new GeminiRequestError(503, 'gemini_key_invalid', 'Gemini API 키가 유효하지 않아요. Google AI Studio에서 확인해 주세요.');
+        if (probe.status === 403) throw new GeminiRequestError(503, 'gemini_access_denied', 'Gemini 프로젝트의 키 상태와 무료 사용 자격을 Google AI Studio에서 확인해 주세요.');
+        if (probe.status === 404) throw new GeminiRequestError(503, 'gemini_model_unavailable', '설정된 Gemini 모델을 사용할 수 없어요. 모델 설정을 확인해 주세요.');
+        if (probe.ok) throw new GeminiRequestError(504, 'gemini_generation_timeout', 'Google AI 연결은 확인됐지만 답변 생성이 늦어지고 있어요. 잠시 뒤 다시 시도해 주세요.');
+      } catch (probeError) {
+        if (probeError instanceof GeminiRequestError) throw probeError;
+        throw new GeminiRequestError(504, 'gemini_network_timeout', '서버에서 Google AI에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+      }
+      throw new GeminiRequestError(504, 'gemini_timeout', 'AI 응답이 늦어지고 있어요. 잠시 뒤 다시 시도해 주세요.');
+    }
     throw new GeminiRequestError(502, 'gemini_network', '서버에서 Gemini에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
   } finally {
     clearTimeout(timeout);
+    if (stopWaiting) controller.signal.removeEventListener('abort', stopWaiting);
   }
 }

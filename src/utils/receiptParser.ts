@@ -8,7 +8,7 @@ export interface ParseResult {
 }
 export const MAX_RECEIPT_BYTES = 6 * 1024 * 1024;
 export const RECEIPT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-export const DEFAULT_RECEIPT_MODEL = 'gemini-3.8-flash';
+export const DEFAULT_RECEIPT_MODEL = 'gemini-3.5-flash-lite';
 const codes = ['FO01', 'SH01', 'TR01', 'CU01'];
 export const RECEIPT_PROMPT = `너는 영수증 및 카드 결제 내역을 분석하는 금융 AI야. 이미지에서 결제 일자, 결제 금액, 사용처(가맹점명)를 찾아내.
 그리고 사용처에 맞춰 식비(FO01), 쇼핑(SH01), 교통(TR01), 문화(CU01) 중 가장 적절한 추천 카테고리 코드를 골라.
@@ -120,7 +120,7 @@ export async function parseReceiptImage(file: Blob, options: ParseOptions = {}):
   const controller = new AbortController();
   let timedOut = false;
   const cancel = () => controller.abort();
-  const timer = setTimeout(() => {timedOut = true;controller.abort();}, options.timeoutMs ?? 40_000);
+  const timer = setTimeout(() => {timedOut = true;controller.abort();}, options.timeoutMs ?? 60_000);
   options.signal?.addEventListener('abort', cancel, {once: true});
   let stopWaiting: (() => void) | undefined;
   try {

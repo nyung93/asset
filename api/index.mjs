@@ -100,10 +100,11 @@ var GeminiRequestError = class extends Error {
 async function generateGemini(input) {
   const apiKey = process.env.GEMINI_API_KEY?.trim() || process.env.VITE_GEMINI_API_KEY?.trim();
   if (!apiKey) throw new GeminiRequestError(503, "gemini_not_configured", "AI \uC11C\uBC84 \uD0A4\uAC00 \uC544\uC9C1 \uC124\uC815\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694. \uAD00\uB9AC\uC790\uC5D0\uAC8C \uC54C\uB824 \uC8FC\uC138\uC694.");
-  const model = process.env.GEMINI_MODEL?.trim() || process.env.VITE_GEMINI_MODEL?.trim() || "gemini-3.8-flash";
+  const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";
   if (!/^gemini-[a-z0-9.-]{1,60}$/i.test(model)) throw new GeminiRequestError(503, "gemini_model_invalid", "AI \uBAA8\uB378 \uC124\uC815\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 32e3);
+  const timeout = setTimeout(() => controller.abort(), input.timeoutMs ?? 45e3);
+  let stopWaiting;
   try {
     const parts = [{ text: input.prompt }];
     if (input.imageBase64) parts.push({ inlineData: { mimeType: "image/jpeg", data: input.imageBase64 } });
@@ -113,15 +114,20 @@ async function generateGemini(input) {
       generationConfig: {
         maxOutputTokens: input.json ? 1024 : 2048,
         ...input.json ? { responseMimeType: "application/json" } : {},
-        ...model.startsWith("gemini-3.") ? { thinkingConfig: { thinkingLevel: "LOW" } } : {}
+        ...model.startsWith("gemini-3.") ? { thinkingConfig: { thinkingLevel: model.includes("flash-lite") ? "minimal" : "low" } } : {}
       }
     };
-    const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    const aborted = new Promise((_, reject) => {
+      stopWaiting = () => reject(new Error("gemini-aborted"));
+      controller.signal.addEventListener("abort", stopWaiting, { once: true });
+      if (controller.signal.aborted) stopWaiting();
+    });
+    const upstream = await Promise.race([fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify(payload),
       signal: controller.signal
-    });
+    }), aborted]);
     if (!upstream.ok) {
       if (upstream.status === 401) throw new GeminiRequestError(503, "gemini_key_invalid", "Gemini API \uD0A4\uAC00 \uC720\uD6A8\uD558\uC9C0 \uC54A\uC544\uC694. Google AI Studio\uC5D0\uC11C \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
       if (upstream.status === 402 || upstream.status === 403) throw new GeminiRequestError(503, "gemini_access_denied", "Gemini \uD504\uB85C\uC81D\uD2B8\uC758 \uD0A4 \uC0C1\uD0DC\uC640 \uBB34\uB8CC \uC0AC\uC6A9 \uC790\uACA9\uC744 Google AI Studio\uC5D0\uC11C \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
@@ -138,10 +144,26 @@ async function generateGemini(input) {
     return result;
   } catch (error) {
     if (error instanceof GeminiRequestError) throw error;
-    if (controller.signal.aborted) throw new GeminiRequestError(504, "gemini_timeout", "AI \uC751\uB2F5\uC774 \uB2A6\uC5B4\uC9C0\uACE0 \uC788\uC5B4\uC694. \uC7A0\uC2DC \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
+    if (controller.signal.aborted) {
+      try {
+        const probe = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}`, {
+          headers: { "x-goog-api-key": apiKey },
+          signal: AbortSignal.timeout(4e3)
+        });
+        if (probe.status === 401) throw new GeminiRequestError(503, "gemini_key_invalid", "Gemini API \uD0A4\uAC00 \uC720\uD6A8\uD558\uC9C0 \uC54A\uC544\uC694. Google AI Studio\uC5D0\uC11C \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
+        if (probe.status === 403) throw new GeminiRequestError(503, "gemini_access_denied", "Gemini \uD504\uB85C\uC81D\uD2B8\uC758 \uD0A4 \uC0C1\uD0DC\uC640 \uBB34\uB8CC \uC0AC\uC6A9 \uC790\uACA9\uC744 Google AI Studio\uC5D0\uC11C \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
+        if (probe.status === 404) throw new GeminiRequestError(503, "gemini_model_unavailable", "\uC124\uC815\uB41C Gemini \uBAA8\uB378\uC744 \uC0AC\uC6A9\uD560 \uC218 \uC5C6\uC5B4\uC694. \uBAA8\uB378 \uC124\uC815\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
+        if (probe.ok) throw new GeminiRequestError(504, "gemini_generation_timeout", "Google AI \uC5F0\uACB0\uC740 \uD655\uC778\uB410\uC9C0\uB9CC \uB2F5\uBCC0 \uC0DD\uC131\uC774 \uB2A6\uC5B4\uC9C0\uACE0 \uC788\uC5B4\uC694. \uC7A0\uC2DC \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
+      } catch (probeError) {
+        if (probeError instanceof GeminiRequestError) throw probeError;
+        throw new GeminiRequestError(504, "gemini_network_timeout", "\uC11C\uBC84\uC5D0\uC11C Google AI\uC5D0 \uC5F0\uACB0\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uC7A0\uC2DC \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
+      }
+      throw new GeminiRequestError(504, "gemini_timeout", "AI \uC751\uB2F5\uC774 \uB2A6\uC5B4\uC9C0\uACE0 \uC788\uC5B4\uC694. \uC7A0\uC2DC \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
+    }
     throw new GeminiRequestError(502, "gemini_network", "\uC11C\uBC84\uC5D0\uC11C Gemini\uC5D0 \uC5F0\uACB0\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uC7A0\uC2DC \uB4A4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.");
   } finally {
     clearTimeout(timeout);
+    if (stopWaiting) controller.signal.removeEventListener("abort", stopWaiting);
   }
 }
 

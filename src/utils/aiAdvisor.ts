@@ -82,7 +82,7 @@ export async function generateMonthlyAdvice(input: MonthlyAdvisorInput, yearMont
   const controller = new AbortController();
   const relayAbort = () => controller.abort();
   options.signal?.addEventListener('abort', relayAbort, {once: true});
-  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 40_000);
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 60_000);
   let stopWaiting: (() => void) | undefined;
   try {
     if (options.signal?.aborted) controller.abort();

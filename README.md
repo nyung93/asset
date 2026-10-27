@@ -134,10 +134,10 @@ LocalStorage 키 `rich-grandma-tycoon-v1`은 유지하고 저장 버전을 2로 
 
 ```dotenv
 GEMINI_API_KEY=본인의_Google_AI_Studio_키
-GEMINI_MODEL=gemini-3.8-flash
+GEMINI_MODEL=gemini-3.5-flash-lite
 ```
 
-사용자가 승인한 지원 모델로 기본값을 변경했습니다. 요청의 `gemini-1.5-flash`는 [Google 공식 변경 이력](https://ai.google.dev/gemini-api/docs/changelog)의 2025-09-29 항목에 종료가 명시되어 있습니다. 기본 모델은 [공식 모델 목록](https://ai.google.dev/gemini-api/docs/models)의 `gemini-3.8-flash`이며 환경변수로 교체할 수 있습니다. 영수증과 소비 피드백은 로그인된 계정의 서버 API를 거쳐 [Gemini REST API](https://ai.google.dev/gemini-api/docs/generate-content/text-generation)를 호출합니다. 브라우저는 API 키를 받지 않습니다.
+사용자가 승인한 지원 모델로 기본값을 변경했습니다. 요청의 `gemini-1.5-flash`는 [Google 공식 변경 이력](https://ai.google.dev/gemini-api/docs/changelog)의 2025-09-29 항목에 종료가 명시되어 있습니다. 기본 모델은 [Google의 Flash-Lite 모델 문서](https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite)의 `gemini-3.5-flash-lite`이며 이미지 입력과 빠른 문서 추출을 지원합니다. 환경변수로 교체할 수 있습니다. 영수증과 소비 피드백은 로그인된 계정의 서버 API를 거쳐 [Gemini REST API](https://ai.google.dev/gemini-api/docs/generate-content/text-generation)를 호출합니다. 브라우저는 API 키를 받지 않습니다.
 
 Vercel에서는 프로젝트 **Settings → Environment Variables → Production**에 `GEMINI_API_KEY`를 **Secret**으로 추가하고 새 배포를 실행합니다. 기존 `VITE_GEMINI_API_KEY`도 서버에서 일시적으로 읽을 수 있으므로 이전 설정만 있어도 동작하지만, 새 키를 서버 전용 변수에 넣은 뒤 기존 `VITE_` 변수를 삭제하고 재배포하세요. `VITE_*` 값은 브라우저 코드에서 참조하면 노출될 수 있습니다. 키 값은 저장소나 채팅에 올리지 마세요. AI 요청은 로그인한 사용자만 보낼 수 있고 하루 최대 30회로 제한됩니다.
 
@@ -157,7 +157,7 @@ AI의 원시 응답은 JSON 객체만 요청하고, 비결제 이미지나 금�
 
 `src/components/ReceiptImportSheet.tsx`는 모바일 BottomSheet와 데스크톱 모달로 동작합니다. 키보드 포커스는 모달 안에 유지하며 Escape는 영수증 화면만 닫고 작성 중인 가계부는 유지합니다. JPG/PNG/WEBP를 6MB까지 허용하고 MIME 형식과 파일 시그니처를 검사합니다. HEIC·빈 파일·초과 용량은 네트워크 전송 전에 안내합니다.
 
-이미지를 선택하면 Google Gemini로 전송하며 파일 선택 전에 화면에 안내합니다. `accept="image/*"` 파일 선택기를 사용하고 지원하지 않는 형식은 친절한 오류로 처리합니다. `resizeReceiptImage(file, signal?)`는 브라우저에서 이미지를 디코딩한 뒤 Canvas로 가로 최대 800px, 원본 비율 유지, 작은 이미지 확대 없이 리사이징합니다. 투명 배경은 흰색으로 합성하고 JPEG 품질 0.9의 Base64로 변환하여 `{data, mimeType, width, height}`를 반환합니다. API에는 이 변환 결과만 전달합니다. 손상된 이미지, Canvas 실패도 수동 입력 안내로 처리합니다. 앱은 이미지·base64·원시 응답을 LocalStorage에 보관하지 않습니다. 미리보기 URL은 교체·닫기 시 해제합니다. 최대 40초 제한, 취소, 파일 교체, 화면 종료 시 중단과 오래된 응답 무시를 적용했습니다. 이미 서버에 전달된 요청은 브라우저 취소만으로 서버 처리·과금까지 중단된다고 보장하지 않습니다. 자동 재시도는 하지 않으며 사용자가 다시 읽기를 선택할 수 있습니다.
+이미지를 선택하면 Google Gemini로 전송하며 파일 선택 전에 화면에 안내합니다. `accept="image/*"` 파일 선택기를 사용하고 지원하지 않는 형식은 친절한 오류로 처리합니다. `resizeReceiptImage(file, signal?)`는 브라우저에서 이미지를 디코딩한 뒤 Canvas로 가로 최대 800px, 원본 비율 유지, 작은 이미지 확대 없이 리사이징합니다. 투명 배경은 흰색으로 합성하고 JPEG 품질 0.9의 Base64로 변환하여 `{data, mimeType, width, height}`를 반환합니다. API에는 이 변환 결과만 전달합니다. 손상된 이미지, Canvas 실패도 수동 입력 안내로 처리합니다. 앱은 이미지·base64·원시 응답을 LocalStorage에 보관하지 않습니다. 미리보기 URL은 교체·닫기 시 해제합니다. 최대 60초 제한, 취소, 파일 교체, 화면 종료 시 중단과 오래된 응답 무시를 적용했습니다. 이미 서버에 전달된 요청은 브라우저 취소만으로 서버 처리·과금까지 중단된다고 보장하지 않습니다. 자동 재시도는 하지 않으며 사용자가 다시 읽기를 선택할 수 있습니다.
 
 ### 검증
 
@@ -169,6 +169,6 @@ AI의 원시 응답은 JSON 객체만 요청하고, 비결제 이미지나 금�
 
 실서버에서 AI 호출에 실패하면 화면에서 키 설정·프로젝트 사용 권한·모델·무료 사용량·네트워크 문제를 구분해 안내합니다. Firebase 환경 변수와 별도로 서버 전용 `GEMINI_API_KEY`가 필요합니다. 앞서 설정한 `VITE_GEMINI_API_KEY`는 마이그레이션 동안 서버에서만 대체 값으로 읽습니다. 새 키를 `GEMINI_API_KEY`에 등록하고 기존 `VITE_` 변수를 제거하는 편이 안전합니다. 환경 변수 변경 후에는 Vercel을 새로 배포하세요.
 
-요청 모델은 기존 Phase 5와 함께 서버 전용 `GEMINI_MODEL`을 사용하고 기본값은 `gemini-3.8-flash`입니다. 종료된 Gemini 1.5 모델을 새 기능의 기본 모델로 지정하지 않습니다.
+요청 모델은 기존 Phase 5와 함께 서버 전용 `GEMINI_MODEL`을 사용하고 기본값은 `gemini-3.5-flash-lite`입니다. 종료된 Gemini 1.5 모델을 새 기능의 기본 모델로 지정하지 않습니다.
 
 목표 & 설정 탭 하단의 **가계부 데이터 백업하기 (CSV)** 버튼은 전체 거래를 `가계부백업_YYYYMMDD.csv`로 내려받습니다. UTF-8 BOM과 CRLF 줄바꿈으로 한글 스프레드시트 호환을 높였고, 날짜순·동일 날짜 ID순으로 정렬합니다. 사용자가 입력한 메모와 카테고리명은 CSV 인용·이스케이프하고 스프레드시트 수식 시작 문자를 안전하게 처리합니다. 거래가 없어도 헤더만 있는 파일을 받을 수 있습니다.
