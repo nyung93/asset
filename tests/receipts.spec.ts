@@ -7,7 +7,8 @@ const sheet = (page: Page) => page.getByRole('dialog',{name:'영수증 캡처로
 const snapshot = (page: Page) => page.evaluate(()=>JSON.parse(localStorage.getItem('rich-grandma-tycoon-v1') ?? '{"state":{"transactions":[],"xpLogs":[]}}').state);
 async function open(page: Page) {
   await page.goto('/');
-  await page.getByRole('navigation',{name:'하단 탭'}).getByRole('button',{name:'캘린더',exact:true}).click();
+  if (page.viewportSize()!.width < 768) await page.getByRole('navigation',{name:'하단 탭'}).getByRole('button',{name:'캘린더',exact:true}).click();
+  else await page.getByRole('navigation',{name:'메인 메뉴'}).getByRole('button',{name:/^캘린더/}).click();
   await page.getByLabel('선택 날짜',{exact:true}).fill('2026-10-22');
   await page.getByRole('button',{name:'기록하기',exact:true}).click();
 }

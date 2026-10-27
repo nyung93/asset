@@ -17,11 +17,13 @@ test('five complete transparent characters can be chosen and remain consistent a
     await expect(page.locator('.profile svg[data-artwork]')).toHaveAttribute('data-artwork',id);
   }
   await page.getByTestId('my-room').screenshot({path:info.outputPath('room-pink.png')});
-  await page.locator('.bottom-nav').getByRole('button',{name:'캘린더',exact:true}).click();
+  if (page.viewportSize()!.width < 768) await page.getByRole('navigation',{name:'하단 탭'}).getByRole('button',{name:'캘린더',exact:true}).click();
+  else await page.getByRole('navigation',{name:'메인 메뉴'}).getByRole('button',{name:/^캘린더/}).click();
   await expect(page.locator('.main-content svg[data-artwork]')).toHaveAttribute('data-artwork','pink');
   await page.reload();
   await expect(page.locator('.profile svg[data-artwork]')).toHaveAttribute('data-artwork','pink');
-  await page.locator('.bottom-nav').getByRole('button',{name:'홈',exact:true}).click();
+  if (page.viewportSize()!.width < 768) await page.getByRole('navigation',{name:'하단 탭'}).getByRole('button',{name:'홈',exact:true}).click();
+  else await page.getByRole('navigation',{name:'메인 메뉴'}).getByRole('button',{name:/^홈/}).click();
   await expect(page.getByTestId('room-avatar')).toHaveAttribute('data-artwork','pink');
   const transparency=await page.getByTestId('room-avatar').evaluate(async node=>{
     const source=node.querySelector('image')?.getAttribute('href');

@@ -1,7 +1,7 @@
 import type { BudgetCode, Transaction } from '../types';
 export const transactionTypes = ['INCOME', 'EXPENSE', 'SAVING'] as const;
 export const transactionStyle = {
-  INCOME: {label: '수입', text: 'text-emerald-600', bar: 'bg-emerald-500', background: 'bg-emerald-50', sign: '+'},
+  INCOME: {label: '수입', text: 'text-blue-600', bar: 'bg-blue-600', background: 'bg-blue-50', sign: '+'},
   EXPENSE: {label: '지출', text: 'text-rose-500', bar: 'bg-rose-500', background: 'bg-rose-50', sign: '-'},
   SAVING: {label: '저축', text: 'text-indigo-600', bar: 'bg-indigo-500', background: 'bg-indigo-50', sign: ''},
 };

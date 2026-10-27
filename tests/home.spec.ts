@@ -7,7 +7,7 @@ async function seed(page: Page, state: Record<string, unknown>, version = 2) {
   await page.reload();
 }
 
-test('bonuses upgrade houses, animate level-up and remain claimed after reload', async ({page},testInfo) => {
+test('bonuses upgrade houses, announce level-up and remain claimed after reload', async ({page},testInfo) => {
   await page.clock.setFixedTime(now);await page.goto('/');
   await seed(page,{
     character:{...character,totalXp:450,level:5,currentXp:50},
@@ -19,7 +19,7 @@ test('bonuses upgrade houses, animate level-up and remain claimed after reload',
   await expect(page.getByTestId('my-room')).toHaveAttribute('data-stage','2');
   await expect(page.getByTestId('room-background')).toHaveAttribute('src',/room-stage-2\.png/);
   await expect(page.getByText('새 집으로 이사했어요! Lv.6',{exact:true})).toBeVisible();
-  await expect(page.locator('.confetti-layer span')).toHaveCount(32);
+  await expect(page.locator('.level-celebration')).toBeVisible();
   for(const title of ['차곡차곡 저축 달성','이번 달 투자 목표 달성','올해의 부자 습관 완성']) await page.getByRole('button',{name:`${title} XP 받기`,exact:true}).click();
   await expect(page.getByTestId('my-room')).toHaveAttribute('data-stage','3');
   await expect(page.getByTestId('room-background')).toHaveAttribute('src',/room-stage-3\.png/);

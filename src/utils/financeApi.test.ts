@@ -10,6 +10,12 @@ test('valid Yahoo price, currency and actual quote time are parsed', () => {
  assert.ok(Number.isFinite(Date.parse(quote.marketTime)));
  for(const body of [null,{},payload('WRONG'),payload('AAPL',0),payload('AAPL',NaN),payload('AAPL',200,'EUR'),{chart:{error:{description:'Not Found'}}}]) assert.throws(()=>parseYahooQuote(body,'AAPL'));
 });
+test('USD/KRW quote uses KRW per dollar and keeps the market timestamp', () => {
+ const quote=parseYahooQuote(payload('KRW=X',1365.25,'KRW'),'KRW=X');
+ assert.equal(quote.price,1365.25);
+ assert.equal(quote.currency,'KRW');
+ assert.equal(quote.ticker,'KRW=X');
+});
 test('uses encoded public proxy URL and falls back to the wrapped response', async () => {
  const urls:string[]=[];
  globalThis.fetch=async input=>{

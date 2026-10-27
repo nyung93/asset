@@ -9,6 +9,36 @@ export function returnRate(investment: InvestmentMonthly): number | null {
   if (investment.investedPrincipal <= 0 || investment.valuationSource === 'principal') return null;
   return (investment.currentValuation / investment.investedPrincipal - 1) * 100;
 }
+export interface PortfolioTotals {
+  principal: number | null;
+  valuation: number | null;
+  returnRate: number | null;
+  count: number;
+  unpriced: number;
+  needsFx: boolean;
+}
+
+/** Convert each holding with one USD/KRW quote so current and prior snapshots are comparable. */
+export function summarizePortfolio(investments: InvestmentMonthly[], usdKrwRate: number | null): PortfolioTotals {
+  const tracked = investments.filter(isTracked);
+  const needsFx = tracked.some(item => item.currency === 'USD');
+  const unpriced = tracked.filter(item => item.valuationSource === 'principal').length;
+  if (needsFx && (usdKrwRate === null || !Number.isFinite(usdKrwRate) || usdKrwRate <= 0)) {
+    return {principal: null, valuation: null, returnRate: null, count: tracked.length, unpriced, needsFx};
+  }
+  const principal = tracked.reduce((sum, item) => sum + item.investedPrincipal * (item.currency === 'USD' ? usdKrwRate! : 1), 0);
+  const valuation = tracked.reduce((sum, item) => sum + item.currentValuation * (item.currency === 'USD' ? usdKrwRate! : 1), 0);
+  return {principal, valuation, returnRate: principal > 0 && !unpriced ? (valuation / principal - 1) * 100 : null, count: tracked.length, unpriced, needsFx};
+}
+
+/** Native-currency subtotal: pass only holdings of one currency. */
+export function summarizeCurrency(investments: InvestmentMonthly[]): PortfolioTotals {
+  const tracked = investments.filter(isTracked);
+  const principal = tracked.reduce((sum, item) => sum + item.investedPrincipal, 0);
+  const valuation = tracked.reduce((sum, item) => sum + item.currentValuation, 0);
+  const unpriced = tracked.filter(item => item.valuationSource === 'principal').length;
+  return {principal, valuation, returnRate: principal > 0 && !unpriced ? (valuation / principal - 1) * 100 : null, count: tracked.length, unpriced, needsFx: false};
+}
 export function previousMonthChange(investment: InvestmentMonthly, investments: InvestmentMonthly[]): number | null {
   if (!investment.ticker) return null;
   const previousMonth = addMonths(`${investment.yearMonth}-01`, -1).slice(0, 7);

@@ -3,6 +3,15 @@ import {loadEnv} from 'vite';
 
 const person={id:'00000000-0000-4000-8000-000000000001',name:'민영',username:'minyoung',birthDate:'1994-05-15',phone:'01012345678',role:'USER',createdAt:'2026-10-01T00:00:00.000Z',lastLoginAt:'2026-10-26T00:00:00.000Z'};
 const admin={...person,id:'00000000-0000-4000-8000-000000000002',name:'관리자',username:'grandma_admin',role:'ADMIN'};
+async function expectAppNavigation(page:Page) {
+  if (page.viewportSize()!.width < 768) {
+    await expect(page.getByRole('navigation',{name:'하단 탭'})).toBeVisible();
+    await expect(page.locator('.sidebar')).toBeHidden();
+  } else {
+    await expect(page.getByRole('navigation',{name:'메인 메뉴'})).toBeVisible();
+    await expect(page.locator('.bottom-nav')).toBeHidden();
+  }
+}
 
 async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
   let current=initial;
@@ -31,9 +40,9 @@ async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
 
 test('first screen gates the app and validates signup fields',async({page})=>{
   await page.goto('/');
-  await expect(page.getByRole('heading',{name:/돈 모으는 하루/})).toBeVisible();
+  await expect(page.getByRole('heading',{name:/오늘 쓴 가계부가/})).toBeVisible();
   await expect(page.getByRole('tab',{name:'로그인'})).toBeVisible();
-  await expect(page.getByRole('heading',{name:'다시 만나 반가워요!'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
   await expect(page.locator('.bottom-nav')).toHaveCount(0);
   await page.getByRole('tab',{name:'회원가입'}).click();
   for(const label of ['이름','생년월일','휴대폰 번호','아이디','비밀번호']) await expect(page.getByLabel(label,{exact:true})).toBeVisible();
@@ -70,7 +79,7 @@ test('valid signup creates a session and opens the app',async({page})=>{
   await page.getByLabel('아이디',{exact:true}).fill('minyoung');
   await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
   await page.getByRole('button',{name:'회원가입하고 시작하기'}).click();
-  await expect(page.locator('.bottom-nav')).toBeVisible();
+  await expectAppNavigation(page);
 });
 
 test('login opens account data and immutable profile fields',async({page})=>{
@@ -78,7 +87,7 @@ test('login opens account data and immutable profile fields',async({page})=>{
   await page.getByLabel('아이디',{exact:true}).fill('minyoung');
   await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
   await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
-  await expect(page.locator('.bottom-nav')).toBeVisible();
+  await expectAppNavigation(page);
   await page.getByRole('button',{name:/마이페이지/}).first().click();
   await expect(page.getByRole('heading',{name:'마이페이지'})).toBeVisible();
   await expect(page.getByLabel('이름',{exact:true})).toHaveAttribute('readonly','');
@@ -87,7 +96,7 @@ test('login opens account data and immutable profile fields',async({page})=>{
   await page.getByRole('button',{name:'내 정보 저장'}).click();
   await expect(page.getByRole('status')).toContainText('저장했어요');
   await page.getByRole('button',{name:'로그아웃',exact:true}).last().click();
-  await expect(page.getByRole('heading',{name:'다시 만나 반가워요!'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
 });
 
 test('admin dashboard lists members and account access can be ended',async({page})=>{
@@ -104,7 +113,7 @@ test('admin dashboard lists members and account access can be ended',async({page
 
 test('authenticated store changes are sent to the account API',async({page})=>{
   const api=await mockApi(page,'user');await page.goto('/');
-  await expect(page.locator('.bottom-nav')).toBeVisible();
+  await expectAppNavigation(page);
   await page.evaluate(async()=>{
     const {useAppStore}=await import('/src/store/index.ts');
     useAppStore.getState().saveGoal({year:2026,month:10,targetSavingAmount:50000,targetInvestReturnRate:3});
@@ -112,7 +121,7 @@ test('authenticated store changes are sent to the account API',async({page})=>{
   await expect.poll(()=>api.saves.length).toBe(1);
   expect((api.saves[0] as {data:{goals:Array<{targetSavingAmount:number}>}}).data.goals[0].targetSavingAmount).toBe(50000);
   await page.reload();
-  await expect(page.locator('.bottom-nav')).toBeVisible();
+  await expectAppNavigation(page);
   const restored=await page.evaluate(async()=>{
     const {useAppStore}=await import('/src/store/index.ts');
     return useAppStore.getState().goals;
@@ -132,7 +141,8 @@ test('My Page character choice saves to the account and follows the user across 
   await expect.poll(()=>api.saves.length).toBe(2);
   await page.getByRole('button',{name:'마이룸으로 돌아가기'}).click();
   await expect(page.getByTestId('room-avatar')).toHaveAttribute('data-artwork','pink');
-  await page.locator('.bottom-nav').getByRole('button',{name:'캘린더',exact:true}).click();
+  if (page.viewportSize()!.width < 768) await page.getByRole('navigation',{name:'하단 탭'}).getByRole('button',{name:'캘린더',exact:true}).click();
+  else await page.getByRole('navigation',{name:'메인 메뉴'}).getByRole('button',{name:/^캘린더/}).click();
   await expect(page.locator('.main-content svg[data-artwork]')).toHaveAttribute('data-artwork','pink');
   await page.reload();
   await expect(page.locator('.profile svg[data-artwork]')).toHaveAttribute('data-artwork','pink');

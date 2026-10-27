@@ -1,5 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
-const navigate = (page: Page, name: string) => page.getByRole('navigation', {name:'하단 탭'}).getByRole('button',{name,exact:true}).click();
+const navigate = (page: Page, name: string) => page.viewportSize()!.width < 768
+  ? page.getByRole('navigation', {name:'하단 탭'}).getByRole('button',{name,exact:true}).click()
+  : page.getByRole('navigation', {name:'메인 메뉴'}).getByRole('button',{name:new RegExp(`^${name}`)}).click();
 async function record(page: Page, type: string, amount: string, memo: string) {
   await page.getByRole('button',{name:'기록하기',exact:true}).click();
   const dialog = page.getByRole('dialog',{name:'가계부 기록하기'});
@@ -28,7 +30,7 @@ test('ledger views, rewards, persistence, deletion and monthly reports',async ({
   expect(state.xpLogs).toHaveLength(1);
   await page.getByRole('button',{name:'일간 Daily',exact:true}).click();
   const list = page.getByRole('list');
-  await expect(list.getByText('+3,000,000원',{exact:true})).toHaveClass(/text-emerald-600/);
+  await expect(list.getByText('+3,000,000원',{exact:true})).toHaveClass(/text-blue-600/);
   await expect(list.getByText('-450,000원',{exact:true})).toHaveClass(/text-rose-500/);
   await expect(list.getByText('500,000원',{exact:true})).toHaveClass(/text-indigo-600/);
   await page.getByRole('button',{name:'윤년 식비 -450,000원 삭제',exact:true}).click();

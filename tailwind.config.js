@@ -5,20 +5,20 @@ export default {
     extend: {
       colors: {
         forest: {
-          DEFAULT: '#58714e',
-          dark: '#465d3e',
-          pale: '#edf1e4',
+          DEFAULT: '#176897',
+          dark: '#12577f',
+          pale: '#eaf4fb',
         },
-        cream: '#f7f6f0',
-        peach: '#faf0e6',
+        cream: '#f7fafc',
+        peach: '#e6f2fa',
         coral: '#e37870',
-        ink: '#30362e',
+        ink: '#27343e',
       },
       fontFamily: {
-        sans: ['Inter', 'Pretendard', 'system-ui', 'sans-serif'],
+        sans: ['Pretendard Variable', 'Pretendard', 'Noto Sans KR', 'sans-serif'],
       },
       boxShadow: {
-        cozy: '0 8px 28px rgb(48 54 46 / 8%)',
+        cozy: '0 6px 20px rgb(39 52 62 / 6%)',
       },
     },
   },
