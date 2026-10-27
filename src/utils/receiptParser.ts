@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { isValidDate } from '../lib/calendar';
 import type { BudgetCode } from '../types';
 
@@ -112,18 +111,16 @@ export async function resizeReceiptImage(file: Blob, signal?: AbortSignal): Prom
   }
 }
 
-interface ParseOptions { signal?: AbortSignal; timeoutMs?: number; apiKey?: string; model?: string }
+interface ParseOptions { signal?: AbortSignal; timeoutMs?: number }
 
 /** One user-initiated request, bounded and cancellable. Images are never persisted. */
 export async function parseReceiptImage(file: Blob, options: ParseOptions = {}): Promise<ParseResult> {
   const fileError = receiptFileError(file);
   if (fileError) return failed(fileError);
-  const apiKey = options.apiKey ?? import.meta.env?.VITE_GEMINI_API_KEY;
-  if (!apiKey?.trim()) return failed('자동 입력 연결이 아직 준비되지 않았어요. 지금은 직접 입력으로 기록을 이어갈 수 있어요.');
   const controller = new AbortController();
   let timedOut = false;
   const cancel = () => controller.abort();
-  const timer = setTimeout(() => {timedOut = true;controller.abort();}, options.timeoutMs ?? 25_000);
+  const timer = setTimeout(() => {timedOut = true;controller.abort();}, options.timeoutMs ?? 40_000);
   options.signal?.addEventListener('abort', cancel, {once: true});
   let stopWaiting: (() => void) | undefined;
   try {
@@ -136,27 +133,23 @@ export async function parseReceiptImage(file: Blob, options: ParseOptions = {}):
     const read = async (): Promise<ParseResult> => {
       const resized = await resizeReceiptImage(file, controller.signal);
       if (controller.signal.aborted) throw new Error('receipt-aborted');
-      const model = new GoogleGenerativeAI(apiKey).getGenerativeModel({
-        model: options.model ?? import.meta.env?.VITE_GEMINI_MODEL ?? DEFAULT_RECEIPT_MODEL,
-        systemInstruction: RECEIPT_PROMPT,
-        generationConfig: {responseMimeType: 'application/json'},
+      if (resized.data.length > 1_800_000) return failed('이미지가 조금 커요. 결제 부분만 캡처해서 다시 시도해 주세요.');
+      const response = await fetch('/api/index?action=ai-receipt', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({imageBase64: resized.data}), signal: controller.signal,
       });
-      const result = await model.generateContent([
-        {text: '이 이미지의 결제 내역 하나를 지정한 JSON으로 추출해 줘.'},
-        {inlineData: {mimeType: resized.mimeType, data: resized.data}},
-      ], {signal: controller.signal});
-      const candidate = result.response.candidates?.[0];
-      if (!candidate || candidate.finishReason !== 'STOP') return failed('이 이미지는 내용을 확인하기 어려워요. 다른 결제 이미지로 다시 시도하거나 직접 입력해 주세요.');
-      return parseReceiptResponse(result.response.text());
+      const result = await response.json().catch(() => ({})) as ParseResult & {error?: string};
+      if (!response.ok) throw new Error(result.error || '자동 입력 서비스 응답을 확인하지 못했어요. 직접 입력하거나 다시 시도해 주세요.');
+      if (result.status !== 'SUCCESS' && result.status !== 'PARTIAL' && result.status !== 'FAILED') throw new Error('자동 입력 결과를 읽지 못했어요. 다시 시도해 주세요.');
+      return result;
     };
     return await Promise.race([read(), aborted]);
   } catch (error) {
     if (timedOut) return failed('읽는 데 시간이 조금 걸리네요. 잠시 후 다시 시도하거나 직접 입력해 주세요.');
     if (controller.signal.aborted) return failed('이미지 읽기를 취소했어요. 직접 입력하거나 다시 시도할 수 있어요.');
     if (error instanceof ReceiptImageError) return failed(error.message);
-    const status = typeof error === 'object' && error && 'status' in error ? error.status : undefined;
-    if (status === 429) return failed('지금은 자동 입력 요청이 많아요. 잠시 후 다시 시도하거나 직접 입력해 주세요.');
-    if (status === 400 || status === 401 || status === 403 || status === 404) return failed('자동 입력 서비스 연결을 확인하고 있어요. 지금은 직접 입력으로 기록을 이어가 주세요.');
+    if (error instanceof Error && error.message !== 'Failed to fetch' && !(error instanceof TypeError)) return failed(error.message);
     return failed('연결이 잠시 끊겼어요. 네트워크를 확인하고 다시 시도해 주세요. 직접 입력도 가능해요.');
   } finally {
     clearTimeout(timer);

@@ -46,7 +46,7 @@ npm run test:e2e:auth  # 로그인·마이페이지·관리자 화면 검증
 
 ## Phase 3 투자 포트폴리오
 
-- `src/data/stocks.json`: 한국 주식, 나스닥, ETF, 금 ETF 20개 샘플. 전체 지수 구성 종목이나 ETF 순위 목록이 아닙니다. 한국어 별칭·티커·영문명으로 검색합니다. 금은 실물 금 ETF인 GLD를 사용하며 원금과 수량의 단위는 USD와 주입니다.
+- `src/data/stocks.json`: 한국 주식, 나스닥 주식, 미국·국내 상장 ETF와 금 ETF를 포함한 검색 목록 45개(국내 상장 ETF 27개). 전체 지수 구성 종목이나 ETF 순위 목록은 아닙니다. 한국어 별칭·티커·영문명으로 검색하며, `src/stocks.json`은 투자 화면의 검색 원본이 아닙니다. 국내 상장 ETF(`.KS`)의 매수 원금과 평가금액은 KRW, 미국 상장 GLD 등은 USD로 기록합니다. 금현물 검색 결과의 `ACE KRX금현물`과 `TIGER KRX금현물`은 국내 상장 ETF이며 KRX 금시장 직접 거래와 다릅니다. 검색 목록에 있다는 이유만으로 한국투자증권 ISA·IRP·연금저축 계좌에서 주문할 수 있다고 보증하지 않습니다. 특히 금현물·원자재형 상품의 주문 가능 여부와 퇴직연금 투자 한도는 해당 계좌의 실제 주문 화면에서 확인해야 합니다.
 - `src/utils/financeApi.ts`: `fetchCurrentPrice(ticker)`는 Yahoo의 `regularMarketPrice` 또는 실패 시 `null`을 반환합니다. `{includeMetadata: true}` 옵션은 가격, 통화, 거래 기준 시각, 조회 시각을 반환합니다.
 - `src/components/InvestmentTab.tsx`: 키보드 자동완성, 원금·실제 보유 수량 입력/수정, 월별 기록, 시세 갱신, 종목별 수익률과 전월 대비, 통화별 요약입니다.
 - `src/lib/investments.ts`: 보유 수량 기반 평가, 월별 스냅샷 이월, 전월 대비 계산과 오래된 응답 보호입니다.
@@ -133,13 +133,13 @@ LocalStorage 키 `rich-grandma-tycoon-v1`은 유지하고 저장 버전을 2로 
 `.env.example`을 참고해 프로젝트 루트의 `.env.local`에 다음 값을 설정한 뒤 Vite 개발 서버를 재시작합니다.
 
 ```dotenv
-VITE_GEMINI_API_KEY=본인의_Gemini_API_키
-VITE_GEMINI_MODEL=gemini-3.8-flash
+GEMINI_API_KEY=본인의_Google_AI_Studio_키
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
-사용자가 승인한 지원 모델로 기본값을 변경했습니다. 요청의 `gemini-1.5-flash`는 [Google 공식 변경 이력](https://ai.google.dev/gemini-api/docs/changelog)의 2025-09-29 항목에 종료가 명시되어 있습니다. 기본 모델은 [공식 모델 목록](https://ai.google.dev/gemini-api/docs/models)의 `gemini-3.8-flash`이며 환경변수로 교체할 수 있습니다. SDK는 요청대로 `@google/generative-ai`를 사용합니다. 이 SDK는 [공식 저장소](https://github.com/google-gemini/deprecated-generative-ai-js)에서 deprecated로 표시되어 있으므로 후속 SDK 전환 시 `receiptParser.ts`의 API 호출 부분을 교체할 수 있습니다.
+사용자가 승인한 지원 모델로 기본값을 변경했습니다. 요청의 `gemini-1.5-flash`는 [Google 공식 변경 이력](https://ai.google.dev/gemini-api/docs/changelog)의 2025-09-29 항목에 종료가 명시되어 있습니다. 기본 모델은 [공식 모델 목록](https://ai.google.dev/gemini-api/docs/models)의 `gemini-3.8-flash`이며 환경변수로 교체할 수 있습니다. 영수증과 소비 피드백은 로그인된 계정의 서버 API를 거쳐 [Gemini REST API](https://ai.google.dev/gemini-api/docs/generate-content/text-generation)를 호출합니다. 브라우저는 API 키를 받지 않습니다.
 
-**Vite의 `VITE_*` 값은 브라우저 번들에 포함됩니다.** `.gitignore`는 환경 파일의 커밋을 막지만 브라우저에서 키를 숨기지는 않습니다. 공개 서비스에서는 인증·사용량 제한을 갖춘 서버에서 키를 관리하고 브라우저가 해당 서버를 호출하도록 전환해야 합니다. 이번 구현은 요청한 클라이언트 환경변수 방식을 사용하며 실제 키를 생성하거나 다른 프로젝트 환경 파일에서 복사하지 않습니다.
+Vercel에서는 프로젝트 **Settings → Environment Variables → Production**에 `GEMINI_API_KEY`를 **Secret**으로 추가하고 새 배포를 실행합니다. 기존 `VITE_GEMINI_API_KEY`도 서버에서 일시적으로 읽을 수 있으므로 이전 설정만 있어도 동작하지만, 새 키를 서버 전용 변수에 넣은 뒤 기존 `VITE_` 변수를 삭제하고 재배포하세요. `VITE_*` 값은 브라우저 코드에서 참조하면 노출될 수 있습니다. 키 값은 저장소나 채팅에 올리지 마세요. AI 요청은 로그인한 사용자만 보낼 수 있고 하루 최대 30회로 제한됩니다.
 
 ### 파서 계약
 
@@ -157,16 +157,18 @@ AI의 원시 응답은 JSON 객체만 요청하고, 비결제 이미지나 금�
 
 `src/components/ReceiptImportSheet.tsx`는 모바일 BottomSheet와 데스크톱 모달로 동작합니다. 키보드 포커스는 모달 안에 유지하며 Escape는 영수증 화면만 닫고 작성 중인 가계부는 유지합니다. JPG/PNG/WEBP를 6MB까지 허용하고 MIME 형식과 파일 시그니처를 검사합니다. HEIC·빈 파일·초과 용량은 네트워크 전송 전에 안내합니다.
 
-이미지를 선택하면 Google Gemini로 전송하며 파일 선택 전에 화면에 안내합니다. `accept="image/*"` 파일 선택기를 사용하고 지원하지 않는 형식은 친절한 오류로 처리합니다. `resizeReceiptImage(file, signal?)`는 브라우저에서 이미지를 디코딩한 뒤 Canvas로 가로 최대 800px, 원본 비율 유지, 작은 이미지 확대 없이 리사이징합니다. 투명 배경은 흰색으로 합성하고 JPEG 품질 0.9의 Base64로 변환하여 `{data, mimeType, width, height}`를 반환합니다. API에는 이 변환 결과만 전달합니다. 손상된 이미지, Canvas 실패도 수동 입력 안내로 처리합니다. 앱은 이미지·base64·원시 응답을 LocalStorage에 보관하지 않습니다. 미리보기 URL은 교체·닫기 시 해제합니다. 최대 25초 제한, 취소, 파일 교체, 화면 종료 시 중단과 오래된 응답 무시를 적용했습니다. 이미 서버에 전달된 요청은 브라우저 취소만으로 서버 처리·과금까지 중단된다고 보장하지 않습니다. 자동 재시도는 하지 않으며 사용자가 다시 읽기를 선택할 수 있습니다.
+이미지를 선택하면 Google Gemini로 전송하며 파일 선택 전에 화면에 안내합니다. `accept="image/*"` 파일 선택기를 사용하고 지원하지 않는 형식은 친절한 오류로 처리합니다. `resizeReceiptImage(file, signal?)`는 브라우저에서 이미지를 디코딩한 뒤 Canvas로 가로 최대 800px, 원본 비율 유지, 작은 이미지 확대 없이 리사이징합니다. 투명 배경은 흰색으로 합성하고 JPEG 품질 0.9의 Base64로 변환하여 `{data, mimeType, width, height}`를 반환합니다. API에는 이 변환 결과만 전달합니다. 손상된 이미지, Canvas 실패도 수동 입력 안내로 처리합니다. 앱은 이미지·base64·원시 응답을 LocalStorage에 보관하지 않습니다. 미리보기 URL은 교체·닫기 시 해제합니다. 최대 40초 제한, 취소, 파일 교체, 화면 종료 시 중단과 오래된 응답 무시를 적용했습니다. 이미 서버에 전달된 요청은 브라우저 취소만으로 서버 처리·과금까지 중단된다고 보장하지 않습니다. 자동 재시도는 하지 않으며 사용자가 다시 읽기를 선택할 수 있습니다.
 
 ### 검증
 
-실제 브라우저 Canvas 테스트는 전송 이미지의 800px 축소, 종횡비, 작은 이미지 크기 유지, 투명 배경의 흰색 합성과 손상된 이미지의 전송 차단을 검증합니다. 단위 테스트는 응답 검증, 윤년 날짜, 부분 결과, 금액 누락, 코드 연결, 파일 제한, API 오류, 시간 초과·취소를 확인합니다. Playwright는 실제 Gemini SDK의 HTTP 요청을 모의 응답으로 처리하고 성공·부분·실패·할당량 초과·늦은 응답·Escape·수정·명시적 저장 및 XP를 데스크톱/모바일에서 확인합니다. 테스트 서버의 API 키는 가짜 값입니다. 실제 Gemini 키로 이미지 인식 정확도나 계정별 모델 사용 가능 여부를 검증한 것은 아닙니다.
+실제 브라우저 Canvas 테스트는 전송 이미지의 800px 축소, 종횡비, 작은 이미지 크기 유지, 투명 배경의 흰색 합성과 손상된 이미지의 전송 차단을 검증합니다. 단위 테스트는 응답 검증, 윤년 날짜, 부분 결과, 금액 누락, 코드 연결, 파일 제한, API 오류, 시간 초과·취소를 확인합니다. Playwright는 앱 서버의 AI 응답을 모의 처리하고 성공·부분·실패·할당량 초과·늦은 응답·Escape·수정·명시적 저장 및 XP를 데스크톱/모바일에서 확인합니다. 테스트 서버의 API 키는 가짜 값입니다. 실제 Gemini 키로 이미지 인식 정확도나 계정별 모델 사용 가능 여부를 검증한 것은 아닙니다.
 
 ## Phase 6 할미의 소비 피드백과 CSV 백업
 
 통계 탭 상단의 **이번 달 할미의 잔소리 듣기** 버튼은 선택 월의 예산 한도 합계, 지출 합계, 지출이 가장 큰 코드·카테고리, 투자 수익률을 모아 Gemini에 전달합니다. 개별 메모나 거래 목록은 보내지 않습니다. USD와 KRW 수익률은 환산해 더하지 않고 따로 표시하며, 해당 월의 보유 종목 시세가 하나라도 확인되지 않으면 수익률을 전달하지 않습니다. 피드백은 정확히 세 문장인지 확인한 뒤 캐릭터 말풍선에 보여줍니다. API 키 누락·요청 제한·네트워크 오류에는 재시도 안내를 표시합니다. 요청을 전송하는 통계 버튼에는 API 키가 설정되어 있어야 합니다.
 
-요청 모델은 기존 Phase 5와 함께 `VITE_GEMINI_MODEL`을 사용하고 기본값은 `gemini-3.8-flash`입니다. 종료된 Gemini 1.5 모델을 새 기능의 기본 모델로 지정하지 않습니다.
+실서버에서 AI 호출에 실패하면 화면에서 키 설정·프로젝트 사용 권한·모델·무료 사용량·네트워크 문제를 구분해 안내합니다. Firebase 환경 변수와 별도로 서버 전용 `GEMINI_API_KEY`가 필요합니다. 앞서 설정한 `VITE_GEMINI_API_KEY`는 마이그레이션 동안 서버에서만 대체 값으로 읽습니다. 새 키를 `GEMINI_API_KEY`에 등록하고 기존 `VITE_` 변수를 제거하는 편이 안전합니다. 환경 변수 변경 후에는 Vercel을 새로 배포하세요.
+
+요청 모델은 기존 Phase 5와 함께 서버 전용 `GEMINI_MODEL`을 사용하고 기본값은 `gemini-3.8-flash`입니다. 종료된 Gemini 1.5 모델을 새 기능의 기본 모델로 지정하지 않습니다.
 
 목표 & 설정 탭 하단의 **가계부 데이터 백업하기 (CSV)** 버튼은 전체 거래를 `가계부백업_YYYYMMDD.csv`로 내려받습니다. UTF-8 BOM과 CRLF 줄바꿈으로 한글 스프레드시트 호환을 높였고, 날짜순·동일 날짜 ID순으로 정렬합니다. 사용자가 입력한 메모와 카테고리명은 CSV 인용·이스케이프하고 스프레드시트 수식 시작 문자를 안전하게 처리합니다. 거래가 없어도 헤더만 있는 파일을 받을 수 있습니다.

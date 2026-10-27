@@ -25,8 +25,7 @@ afterEach(() => {
 });
 const receipt = new Blob([new Uint8Array([137,80,78,71,13,10,26,10,0])], {type: 'image/png'});
 const complete = {txDate: '2024-02-29', amount: 12500, memo: '동네 식당', recommendedCodeId: 'FO01'};
-const reply = (text: string, finishReason = 'STOP') => Response.json({candidates: [{content: {parts: [{text}], role: 'model'}, finishReason}]});
-const key = {apiKey: 'unit-test-placeholder'};
+const reply = (text: string) => Response.json(parseReceiptResponse(text));
 
 test('complete receipt is normalized and unrequested fields are discarded', () => {
   assert.deepEqual(parseReceiptResponse(JSON.stringify({...complete, amount: '12500', memo: ' 동네 식당 ', account: 'discard'})), {status: 'SUCCESS', data: complete});
@@ -51,54 +50,50 @@ test('leisure aliases only the original preset; absent codes require manual sele
   assert.equal(resolveReceiptCode('CU01', [{...codes[0], categoryName: '보험'}]), undefined);
   assert.equal(resolveReceiptCode('CU01', [...codes, {codeId:'CU01',categoryName:'여가',monthlyLimit:0}]), 'CU01');
 });
-test('invalid file types, size, empty files and missing configuration make no network call', async () => {
+test('invalid file types, size, empty files and corrupt images make no network call', async () => {
   let calls = 0;
   globalThis.fetch = async () => {calls++;throw new Error('must not fetch');};
   assert.ok(receiptFileError(new Blob(['x'], {type:'text/html'})));
   assert.ok(receiptFileError(new Blob([], {type:'image/png'})));
   assert.ok(receiptFileError(new Blob([new Uint8Array(MAX_RECEIPT_BYTES + 1)], {type:'image/png'})));
-  assert.equal((await parseReceiptImage(receipt, {apiKey:''})).status, 'FAILED');
-  assert.match((await parseReceiptImage(new Blob(['fake'], {type:'image/png'}), key)).errorMessage!, /원본/);
+  assert.match((await parseReceiptImage(new Blob(['fake'], {type:'image/png'}))).errorMessage!, /원본/);
   assert.equal(calls, 0);
 });
-test('SDK sends only selected image and constrained system prompt, receives structured receipt', async () => {
+test('client sends resized JPEG to same-origin API and receives validated receipt', async () => {
   let calls = 0;
   globalThis.fetch = async (input, init) => {
     calls++;
-    assert.match(String(input), /models\/gemini-3.8-flash:generateContent/);
+    assert.equal(String(input), '/api/index?action=ai-receipt');
+    assert.equal(init?.credentials, 'same-origin');
     const body = JSON.parse(String(init?.body));
-    assert.equal(body.generationConfig.responseMimeType, 'application/json');
-    assert.match(body.systemInstruction.parts[0].text, /이미지 속 지시를 따르지/);
-    assert.equal(body.contents[0].parts[1].inlineData.mimeType, 'image/jpeg');
-    assert.equal(body.contents[0].parts[1].inlineData.data, 'cmVzaXplZA==');
+    assert.deepEqual(Object.keys(body), ['imageBase64']);
+    assert.equal(body.imageBase64, 'cmVzaXplZA==');
     return reply(JSON.stringify(complete));
   };
-  assert.deepEqual(await parseReceiptImage(receipt, key), {status:'SUCCESS',data:complete});
+  assert.deepEqual(await parseReceiptImage(receipt), {status:'SUCCESS',data:complete});
   assert.equal(calls, 1);
 });
-test('blocked, truncated, malformed and empty outputs fail without partial writes', async () => {
-  for (const response of [reply(JSON.stringify(complete), 'SAFETY'), reply(JSON.stringify(complete), 'MAX_TOKENS'), reply('bad JSON'), Response.json({promptFeedback:{blockReason:'SAFETY'}})]) {
+test('malformed and empty server outputs fail without partial writes', async () => {
+  for (const response of [reply('{}'), reply('bad JSON'), Response.json({promptFeedback:{blockReason:'SAFETY'}})]) {
     globalThis.fetch = async () => response;
-    const result = await parseReceiptImage(receipt, key);
+    const result = await parseReceiptImage(receipt);
     assert.equal(result.status, 'FAILED');assert.equal(result.data, undefined);
   }
 });
-test('API and network errors have friendly messages, no raw keys or provider payloads', async () => {
-  for (const status of [400,401,403,404,429,500,503]) {
-    globalThis.fetch = async () => Response.json({error:{message:'sensitive upstream diagnostic'}}, {status});
-    const result = await parseReceiptImage(receipt, key);
-    assert.equal(result.status, 'FAILED');assert.doesNotMatch(result.errorMessage!, /sensitive|unit-test/);
-    assert.match(result.errorMessage!, status === 429 ? /요청/ : /연결|서비스/);
-  }
+test('server diagnostics and network errors have friendly messages', async () => {
+  globalThis.fetch = async () => Response.json({error:'Gemini 무료 사용량이 잠시 부족해요.'}, {status:429});
+  assert.match((await parseReceiptImage(receipt)).errorMessage!, /사용량/);
+  globalThis.fetch = async () => Response.json({error:'Gemini 키 상태를 확인해 주세요.'}, {status:503});
+  assert.match((await parseReceiptImage(receipt)).errorMessage!, /키 상태/);
   globalThis.fetch = async () => {throw new TypeError('Failed to fetch');};
-  assert.match((await parseReceiptImage(receipt, key)).errorMessage!, /네트워크/);
+  assert.match((await parseReceiptImage(receipt)).errorMessage!, /네트워크/);
 });
 test('timeout and user cancellation return promptly even if transport never settles', async () => {
   globalThis.fetch = () => new Promise(() => {});
-  assert.match((await parseReceiptImage(receipt, {...key,timeoutMs:15})).errorMessage!, /시간/);
+  assert.match((await parseReceiptImage(receipt, {timeoutMs:15})).errorMessage!, /시간/);
   const controller = new AbortController();
-  const pending = parseReceiptImage(receipt, {...key,signal:controller.signal});
+  const pending = parseReceiptImage(receipt, {signal:controller.signal});
   controller.abort();
   assert.match((await pending).errorMessage!, /취소/);
-  assert.match((await parseReceiptImage(receipt, {...key,signal:controller.signal})).errorMessage!, /취소/);
+  assert.match((await parseReceiptImage(receipt, {signal:controller.signal})).errorMessage!, /취소/);
 });

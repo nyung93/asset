@@ -1,6 +1,9 @@
 import {randomUUID} from 'node:crypto';
 import {database, firebaseConfigured} from './db';
 import {decryptField, encryptField, hashPassword, newToken, normalizeUsername, passwordRule, tokenHash, usernameLookup, verifyPassword} from './security';
+import {GeminiRequestError, generateGemini} from './gemini';
+import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
+import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
 
 type Role = 'USER' | 'ADMIN';
 interface UserRow {
@@ -37,10 +40,12 @@ function sameOrigin(req: Request): void {
   if (!origin || origin !== new URL(req.url).origin) throw new ApiError(403, '요청 출처를 확인할 수 없어요.', 'invalid_origin');
 }
 
-async function body(req: Request): Promise<JsonObject> {
+async function body(req: Request, maxChars = 800_000): Promise<JsonObject> {
   if (!req.headers.get('content-type')?.startsWith('application/json')) throw new ApiError(415, 'JSON 요청만 받을 수 있어요.');
+  const length = Number(req.headers.get('content-length'));
+  if (Number.isFinite(length) && length > maxChars) throw new ApiError(413, '전송할 데이터가 너무 커요.');
   const raw = await req.text();
-  if (raw.length > 800_000) throw new ApiError(413, '전송할 데이터가 너무 커요.');
+  if (raw.length > maxChars) throw new ApiError(413, '전송할 데이터가 너무 커요.');
   try {
     const value: unknown = JSON.parse(raw);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid body');
@@ -292,6 +297,55 @@ async function stopImpersonation(req: Request,state: AuthState): Promise<Respons
   return response({user:publicUser(state.primary),impersonating:false},200,[cookie(req,'rgt_impersonation','',0)]);
 }
 
+async function reserveAiRequest(userId: string): Promise<void> {
+  const day = new Date().toISOString().slice(0,10);
+  const ref = database().collection('ai_usage').doc(`${userId}_${day}`);
+  await database().runTransaction(async transaction => {
+    const prior = await transaction.get(ref);
+    const count = Number(prior.data()?.count ?? 0);
+    if (count >= 30) throw new ApiError(429, '오늘의 AI 이용 횟수를 모두 사용했어요. 내일 다시 찾아와 주세요.', 'ai_daily_limit');
+    transaction.set(ref, {count: count + 1, updated_at: new Date().toISOString()});
+  });
+}
+
+function advisorSummary(input: unknown): MonthlyAdvisorSummary {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ApiError(400, '월간 통계를 다시 확인해 주세요.');
+  const value = input as Record<string,unknown>;
+  const amount = (item: unknown) => typeof item === 'number' && Number.isSafeInteger(item) && item >= 0 && item <= 1_000_000_000_000;
+  if (typeof value.yearMonth !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(value.yearMonth) || !amount(value.totalBudget) || !amount(value.totalExpenses)) throw new ApiError(400, '월간 통계를 다시 확인해 주세요.');
+  let topCategory: MonthlyAdvisorSummary['topCategory'] = null;
+  if (value.topCategory !== null) {
+    const category = value.topCategory as Record<string,unknown> | undefined;
+    if (!category || typeof category.categoryName !== 'string' || category.categoryName.length > 60 || typeof category.codeId !== 'string' || !/^[A-Za-z0-9_-]{1,20}$/.test(category.codeId) || !amount(category.amount)) throw new ApiError(400, '지출 카테고리를 다시 확인해 주세요.');
+    topCategory = {categoryName: category.categoryName, codeId: category.codeId, amount: category.amount as number};
+  }
+  if (!Array.isArray(value.investmentReturns) || value.investmentReturns.length > 2) throw new ApiError(400, '투자 수익률을 다시 확인해 주세요.');
+  const investmentReturns = value.investmentReturns.map((item: unknown) => {
+    const record = item as Record<string,unknown> | null;
+    if (!record || (record.currency !== 'KRW' && record.currency !== 'USD') || typeof record.rate !== 'number' || !Number.isFinite(record.rate) || record.rate < -100 || record.rate > 1_000_000) throw new ApiError(400, '투자 수익률을 다시 확인해 주세요.');
+    return {currency: record.currency as 'KRW' | 'USD', rate: record.rate};
+  });
+  return {yearMonth: value.yearMonth, totalBudget: value.totalBudget as number, totalExpenses: value.totalExpenses as number, topCategory, investmentReturns};
+}
+
+async function aiAdvice(state: AuthState, input: JsonObject): Promise<Response> {
+  const summary = advisorSummary(input.summary);
+  await reserveAiRequest(state.effective.id);
+  const raw = await generateGemini({systemPrompt: ADVISOR_SYSTEM_PROMPT, prompt: advisorDataPrompt(summary)});
+  try {return response({text: parseAdvisorResponse(raw).text});}
+  catch {throw new ApiError(502, '할미의 답변을 정리하지 못했어요. 다시 눌러 주세요.', 'gemini_format');}
+}
+
+async function aiReceipt(state: AuthState, input: JsonObject): Promise<Response> {
+  const encoded = input.imageBase64;
+  if (typeof encoded !== 'string' || encoded.length < 20 || encoded.length > 1_800_000 || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new ApiError(400, '결제 이미지를 다시 선택해 주세요.', 'invalid_image');
+  const bytes = Buffer.from(encoded, 'base64');
+  if (bytes.length < 10 || bytes.length > 1_350_000 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new ApiError(400, 'JPG 결제 이미지를 다시 선택해 주세요.', 'invalid_image');
+  await reserveAiRequest(state.effective.id);
+  const raw = await generateGemini({systemPrompt: RECEIPT_PROMPT, prompt: '이 이미지의 결제 내역 하나를 지정한 JSON으로 추출해 줘.', imageBase64: encoded, json: true});
+  return response(parseReceiptResponse(raw) as unknown as JsonObject);
+}
+
 export async function handleRequest(req: Request): Promise<Response> {
   try {
     if (req.method !== 'GET' && req.method !== 'POST') throw new ApiError(405,'지원하지 않는 요청이에요.');
@@ -308,12 +362,15 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (req.method === 'POST' && action === 'data') return await saveData(state,await body(req));
     if (req.method === 'POST' && action === 'profile') return await updateProfile(state,await body(req));
     if (req.method === 'POST' && action === 'stop-impersonation') return await stopImpersonation(req,state);
+    if (req.method === 'POST' && action === 'ai-advice') return await aiAdvice(state,await body(req));
+    if (req.method === 'POST' && action === 'ai-receipt') return await aiReceipt(state,await body(req,1_900_000));
     if (req.method === 'GET' && action === 'dashboard') {adminOnly(state);return await dashboard();}
     if (req.method === 'GET' && action === 'members') {adminOnly(state);return await members(req);}
     if (req.method === 'POST' && action === 'impersonate') return await impersonate(req,state,await body(req));
     throw new ApiError(404,'요청한 기능을 찾을 수 없어요.');
   } catch (error) {
     if (error instanceof ApiError) return response({error:error.message,code:error.code},error.status);
+    if (error instanceof GeminiRequestError) return response({error:error.message,code:error.code},error.status);
     if (error instanceof Error && /아이디는 영문|FIELD_ENCRYPTION_KEY|Invalid encrypted/.test(error.message)) {
       if (error.message.startsWith('아이디')) return response({error:error.message,code:'invalid_input'},400);
     }

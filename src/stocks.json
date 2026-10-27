@@ -35,12 +35,12 @@
     { "name": "JEPI (S&P 500 커버드콜)", "ticker": "JEPI", "market": "ETF" },
     { "name": "SOXX (미국 반도체 ETF)", "ticker": "SOXX", "market": "ETF" },
     { "name": "TIGER 미국배당다우존스", "ticker": "458730.KS", "market": "ETF" },
-    { "name": "TIGER 미국테크TOP10 INDXX", "ticker": "381180.KS", "market": "ETF" }
+    { "name": "TIGER 미국테크TOP10 INDXX", "ticker": "381170.KS", "market": "ETF" }
   ],
   "commodities": [
     { "name": "GLD (금 현물 ETF)", "ticker": "GLD", "market": "Commodity" },
     { "name": "IAU (iShares 금 ETF)", "ticker": "IAU", "market": "Commodity" },
     { "name": "KODEX 골드선물(H)", "ticker": "132030.KS", "market": "Commodity" },
-    { "name": "KRX 금현물", "ticker": "411060.KS", "market": "Commodity" }
+    { "name": "ACE KRX금현물", "ticker": "411060.KS", "market": "Commodity" }
   ]
 }

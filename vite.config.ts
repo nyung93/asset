@@ -46,8 +46,8 @@ function installAccountApi(server: Pick<ViteDevServer, 'middlewares'>) {
 export default defineConfig(({command,mode})=>{
   if (command==='serve') {
     // Vite does not copy unprefixed .env.local values into process.env for Node middleware.
-    const serverEnv=loadEnv(mode,process.cwd(),['FIREBASE_PROJECT_ID','FIREBASE_CLIENT_EMAIL','FIREBASE_PRIVATE_KEY','GOOGLE_APPLICATION_CREDENTIALS','FIELD_ENCRYPTION_KEY']);
-    for (const key of ['FIREBASE_PROJECT_ID','FIREBASE_CLIENT_EMAIL','FIREBASE_PRIVATE_KEY','GOOGLE_APPLICATION_CREDENTIALS','FIELD_ENCRYPTION_KEY'] as const) {
+    const serverEnv=loadEnv(mode,process.cwd(),['FIREBASE_PROJECT_ID','FIREBASE_CLIENT_EMAIL','FIREBASE_PRIVATE_KEY','GOOGLE_APPLICATION_CREDENTIALS','FIELD_ENCRYPTION_KEY','GEMINI_API_KEY','GEMINI_MODEL','VITE_GEMINI_API_KEY','VITE_GEMINI_MODEL']);
+    for (const key of ['FIREBASE_PROJECT_ID','FIREBASE_CLIENT_EMAIL','FIREBASE_PRIVATE_KEY','GOOGLE_APPLICATION_CREDENTIALS','FIELD_ENCRYPTION_KEY','GEMINI_API_KEY','GEMINI_MODEL','VITE_GEMINI_API_KEY','VITE_GEMINI_MODEL'] as const) {
       if (!process.env[key] && serverEnv[key]) process.env[key]=serverEnv[key];
     }
   }

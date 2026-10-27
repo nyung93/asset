@@ -47,7 +47,7 @@ function StockAutocomplete({value, onChange, disabled = false}: {
         onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActive(index)} onClick={() => choose(stock)}>
         <span className="block text-sm font-semibold">{stock.name}</span><span className="text-xs text-stone-500">{stock.ticker} · {stock.market} · {stock.currency}</span>
       </li>)}
-      {!matches.length && <li className="px-4 py-4 text-xs text-stone-500">검색 결과가 없어요. 샘플 20개 종목에서 선택해 주세요.</li>}
+      {!matches.length && <li className="px-4 py-4 text-xs text-stone-500">검색 결과가 없어요. 종목명이나 6자리 종목코드로 다시 검색해 주세요.</li>}
     </ul>}
   </div>;
 }

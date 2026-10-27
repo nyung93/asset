@@ -1,7 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 
-const api = 'https://generativelanguage.googleapis.com/**';
-const response = (data: unknown) => ({candidates:[{content:{role:'model',parts:[{text:JSON.stringify(data)}]},finishReason:'STOP'}]});
+const api = '**/api/index?action=ai-receipt';
+const response = (data: unknown) => ({status:'SUCCESS',data});
 const form = (page: Page) => page.getByRole('dialog',{name:'가계부 기록하기',exact:true});
 const sheet = (page: Page) => page.getByRole('dialog',{name:'영수증 캡처로 입력하기',exact:true});
 const snapshot = (page: Page) => page.evaluate(()=>JSON.parse(localStorage.getItem('rich-grandma-tycoon-v1') ?? '{"state":{"transactions":[],"xpLogs":[]}}').state);
@@ -29,7 +29,7 @@ test('upload automatically fills editable fields using a resized JPEG; save alon
   const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
   let sent:{mimeType:string;data:string}|undefined;
   await page.route(api,async route=>{
-    sent=route.request().postDataJSON().contents[0].parts[1].inlineData;
+    sent={mimeType:'image/jpeg',data:route.request().postDataJSON().imageBase64};
     await route.fulfill({json:response({txDate:'2024-02-29',amount:12500,memo:'동네 식당',recommendedCodeId:'FO01'})});
   });
   await open(page);await choose(page);
@@ -59,7 +59,7 @@ test('upload automatically fills editable fields using a resized JPEG; save alon
 });
 
 test('partial amount preserves draft date and memo and requires a real budget selection',async({page})=>{
-  await page.route(api,route=>route.fulfill({json:response({amount:8900,txDate:'2026-02-30',recommendedCodeId:'BOGUS'})}));
+  await page.route(api,route=>route.fulfill({json:{status:'PARTIAL',data:{amount:8900}}}));
   await open(page);
   await form(page).getByLabel('메모').fill('이미 적은 메모');
   await form(page).getByLabel('구분',{exact:true}).selectOption('INCOME');
@@ -78,12 +78,12 @@ test('partial amount preserves draft date and memo and requires a real budget se
 
 test('failed recognition and quota error offer retry/manual input without clearing drafts',async({page},testInfo)=>{
   let calls=0;
-  await page.route(api,route=>{calls++;return calls===1 ? route.fulfill({json:response({memo:'금액 없는 사진'})}) : route.fulfill({status:429,json:{error:{message:'quota'}}});});
+  await page.route(api,route=>{calls++;return calls===1 ? route.fulfill({json:{status:'FAILED',errorMessage:'결제 금액을 읽지 못했어요.'}}) : route.fulfill({status:429,json:{error:'Gemini 무료 사용량이 잠시 부족해요.'}});});
   await open(page);await form(page).getByLabel('금액 (원)',{exact:true}).fill('7000');
   await choose(page);
   await expect(sheet(page).getByRole('alert')).toContainText('금액을 읽지 못했어요');
   await sheet(page).getByRole('button',{name:'다시 읽기',exact:true}).click();
-  await expect(sheet(page).getByRole('alert')).toContainText('요청이 많아요');
+  await expect(sheet(page).getByRole('alert')).toContainText('사용량');
   await sheet(page).screenshot({path:testInfo.outputPath('receipt-failed.png')});
   await sheet(page).getByRole('button',{name:'직접 입력하기',exact:true}).click();
   await expect(form(page).getByLabel('금액 (원)',{exact:true})).toHaveValue('7000');

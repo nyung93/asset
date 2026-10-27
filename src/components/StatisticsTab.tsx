@@ -63,7 +63,7 @@ export default function StatisticsTab() {
       {adviceError && <div className="mt-4 rounded-xl bg-[#fff8ee] p-4" role="alert"><p className="text-sm text-stone-600">{adviceError}</p><button type="button" className="text-button mt-3" onClick={listenToGrandma}><Sparkles size={14}/>다시 들어보기</button></div>}
       {advice?.period === yearMonth && <div className="mt-4 flex items-start gap-3 rounded-2xl border border-white/80 bg-white/85 p-4 sm:gap-5 sm:p-5">
         <CharacterAvatar avatar={avatar} expression="stoic" useDefaultArtwork={!isCustomized} characterId={characterId} className="h-20 w-16 shrink-0 sm:h-24 sm:w-20"/>
-        <div className="relative min-w-0 rounded-2xl bg-white p-4 text-sm leading-7 text-stone-700 shadow-sm before:absolute before:-left-2 before:top-6 before:border-y-[8px] before:border-r-[9px] before:border-y-transparent before:border-r-white">{advice.text}</div>
+        <div className="relative min-w-0 whitespace-pre-line rounded-2xl bg-white p-4 text-sm leading-7 text-stone-700 shadow-sm before:absolute before:-left-2 before:top-6 before:border-y-[8px] before:border-r-[9px] before:border-y-transparent before:border-r-white">{advice.text}</div>
       </div>}
       <p className="mt-3 text-[11px] text-stone-500">개별 거래 내용은 전송하지 않고, {yearMonth}월 합계와 가장 큰 지출 항목, 확인된 투자 수익률만 전달해요.</p>
     </section>

@@ -52,6 +52,8 @@ function sessionCookie(response:Response) {
 }
 
 test('Firestore API keeps encrypted accounts, sessions, versioned data and admin access separate',async()=>{
+  const originalFetch=globalThis.fetch;
+  const oldGeminiKey=process.env.GEMINI_API_KEY;
   process.env.NODE_ENV='test';
   process.env.FIREBASE_PROJECT_ID='test-project';
   process.env.FIREBASE_CLIENT_EMAIL='test@example.com';
@@ -87,6 +89,26 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     assert.equal(await handleRequest(request('login','POST',{username:'test1',password:'wrong'})).then(res=>res.status),401);
     const login=await handleRequest(request('login','POST',{username:'test1',password:input.password}));
     assert.equal(login.status,200);
+    process.env.GEMINI_API_KEY='integration-test-key';
+    const summary={yearMonth:'2026-10',totalBudget:100000,totalExpenses:120000,
+      topCategory:{categoryName:'식비',codeId:'FO01',amount:120000},investmentReturns:[]};
+    assert.equal(await handleRequest(request('ai-advice','POST',{summary})).then(res=>res.status),401);
+    let aiCalls=0;
+    globalThis.fetch=async (_url,init)=>{
+      aiCalls++;
+      assert.equal(new Headers(init?.headers).get('x-goog-api-key'),'integration-test-key');
+      assert.doesNotMatch(String(init?.body),/personal memo/);
+      return Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:'👵🏻 총평이야\n💸 식비를 줄여보렴\n📈 투자도 살펴보자'}]}}]});
+    };
+    const advice=await handleRequest(request('ai-advice','POST',{summary},sessionCookie(login)));
+    assert.equal(advice.status,200);
+    assert.match((await advice.json()).text,/식비를 줄여보렴/);
+    assert.equal(aiCalls,1);
+    assert.equal(await handleRequest(request('ai-receipt','POST',{imageBase64:'invalid'},sessionCookie(login))).then(res=>res.status),400);
+    const imageBase64=Buffer.from([0xff,0xd8,0xff,...new Array(40).fill(0)]).toString('base64');
+    globalThis.fetch=async ()=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:'{"amount":12500,"memo":"동네 식당","txDate":"2026-10-22","recommendedCodeId":"FO01"}'}]}}]});
+    const receipt=await handleRequest(request('ai-receipt','POST',{imageBase64},sessionCookie(login)));
+    assert.deepEqual(await receipt.json(),{status:'SUCCESS',data:{amount:12500,txDate:'2026-10-22',memo:'동네 식당',recommendedCodeId:'FO01'}});
     assert.equal(await handleRequest(request('logout','POST',{},cookie)).then(res=>res.status),200);
     assert.equal(await handleRequest(request('status','GET',undefined,cookie)).then(res=>res.status),401);
 
@@ -111,5 +133,9 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     assert.equal((await handleRequest(request('status','GET',undefined,both)).then(res=>res.json())).user.id,user.id);
     assert.equal(await handleRequest(request('dashboard','GET',undefined,both)).then(res=>res.status),403);
     assert.equal((await handleRequest(request('stop-impersonation','POST',{},both)).then(res=>res.json())).user.id,adminId);
-  } finally {setDatabaseForTests(undefined);}
+  } finally {
+    globalThis.fetch=originalFetch;
+    if(oldGeminiKey===undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=oldGeminiKey;
+    setDatabaseForTests(undefined);
+  }
 });
