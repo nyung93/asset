@@ -6,3 +6,5 @@ playwright-report/
 .env
 .env.*
 !.env.example
+*firebase-adminsdk*.json
+asset-1d626-*.json
