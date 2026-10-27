@@ -73,6 +73,22 @@ test('monthly snapshot carry-forward and percentage point comparison preserve hi
  await expect(historical).toContainText('+5.00%');
  expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('rich-grandma-tycoon-v1')!).state.investments.find((i:{yearMonth:string})=>i.yearMonth==='2026-09').currentValuation)).toBe(2100);
 });
+test('exchange rate recovers automatically after one temporary API failure',async({page})=>{
+ await page.clock.setFixedTime(now);
+ await page.addInitScript(()=>{
+  localStorage.setItem('rich-grandma-tycoon-v1',JSON.stringify({version:1,state:{investments:[{invId:'usd',yearMonth:'2026-10',tickerName:'Apple Inc.',ticker:'AAPL',currency:'USD',quantity:10,purchasePrice:200,investedPrincipal:2000,currentValuation:2100,lastPrice:210,quoteTime:'2026-10-20T20:00:00Z',fetchedAt:'2026-10-20T21:00:00Z',valuationSource:'market'}]}}));
+ });
+ let fxRequests=0;
+ await page.route(/\/api\/index\?action=finance-quote&ticker=/,route=>{
+  const ticker=new URL(route.request().url()).searchParams.get('ticker')!;
+  if(ticker==='KRW=X' && ++fxRequests===1) return route.fulfill({status:502,body:'temporarily unavailable'});
+  return route.fulfill({json:{chart:{error:null,result:[{meta:{symbol:ticker,currency:ticker==='KRW=X'?'KRW':'USD',regularMarketPrice:ticker==='KRW=X'?1300:210,regularMarketTime:Math.floor(now.getTime()/1000)}}]}}});
+ });
+ await page.goto('/');await enterInvestments(page);
+ await expect(page.getByText('적용 환율 1 USD =',{exact:false})).toBeVisible();
+ await expect(page.getByRole('article').filter({hasText:'총 매수 원금'})).toContainText('₩2,600,000');
+ expect(fxRequests).toBe(2);
+});
 test('new holdings on API failure are explicitly unpriced until recovery',async({page})=>{
  await page.clock.setFixedTime(now);
  await page.route(/\/api\/index\?action=finance-quote&ticker=/,route=>route.fulfill({status:503,body:'unavailable'}));

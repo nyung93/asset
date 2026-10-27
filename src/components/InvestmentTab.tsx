@@ -176,7 +176,13 @@ export default function InvestmentTab() {
     if (!needsFx) return;
     const id = ++fxRun.current;
     setFxLoading(true);
-    const quote = await fetchCurrentPrice('KRW=X', {includeMetadata: true, force});
+    let quote = await fetchCurrentPrice('KRW=X', {includeMetadata: true, force});
+    if (!quote && fxRun.current === id) {
+      // A single cold-start or upstream failure should recover without user action.
+      await new Promise(resolve => setTimeout(resolve, 700));
+      if (fxRun.current !== id) return;
+      quote = await fetchCurrentPrice('KRW=X', {includeMetadata: true, force: true});
+    }
     if (fxRun.current !== id) return;
     if (quote?.currency === 'KRW' && quote.ticker === 'KRW=X') {setFxQuote(quote);setFxError(false);}
     else setFxError(true);
@@ -219,6 +225,7 @@ export default function InvestmentTab() {
     <div className="mt-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-600" role="status" aria-live="polite">
       {needsFx ? fxQuote ? <>적용 환율 1 USD = {investmentMoney(fxQuote.price, 'KRW')} · 시세 기준 {timestampLabel(fxQuote.marketTime)}{fxError ? ' · 갱신 실패, 마지막 확인 환율 사용' : ''}</> : fxLoading ? 'USD/KRW 환율을 조회하고 있어요…' : '환율을 조회하지 못해 원화 합계를 표시할 수 없어요.' : '달러 보유 종목이 없어 환율 환산이 필요하지 않아요.'}
       {needsFx && fxError && !fxLoading && <button type="button" className="ml-2 font-semibold text-forest underline" onClick={() => void refreshFx(true)}>환율 다시 조회</button>}
+      {needsFx && <span className="block mt-1 text-slate-500">환율 출처: <a className="underline" href="https://finance.yahoo.com/quote/KRW%3DX/" target="_blank" rel="noopener noreferrer">Yahoo Finance USD/KRW</a> · 지연 시세일 수 있어요.</span>}
       {currentTotals.unpriced > 0 && <span className="block mt-1 text-amber-700">시세 미확인 {currentTotals.unpriced}개 종목은 원금으로 임시 표시하며 총 수익률 계산에서 제외해요.</span>}
       <span className="block mt-1 text-slate-500">전월 비교는 두 달 모두 위의 동일한 환율로 환산한 월별 저장값의 차이예요. 종목 추가·수정은 금액 차이에 포함되며, 매수 당시 환율·환차손익은 반영하지 않아요.</span>
     </div>

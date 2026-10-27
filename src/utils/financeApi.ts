@@ -3,7 +3,8 @@ import type { MarketQuote } from '../types';
 const cache = new Map<string, MarketQuote>();
 const inFlight = new Map<string, Promise<MarketQuote | null>>();
 const CACHE_MS = 30_000;
-const TIMEOUT_MS = 12_000;
+// A cold serverless start plus two upstream Yahoo hosts can take over 12 seconds.
+const TIMEOUT_MS = 18_000;
 interface PriceOptions { includeMetadata?: boolean; force?: boolean }
 
 /** Validates the unofficial Yahoo chart response; never treats a missing price as zero. */
