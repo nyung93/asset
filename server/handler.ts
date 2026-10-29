@@ -5,7 +5,7 @@ import {GeminiRequestError, generateGemini} from './gemini';
 import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
 import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
 import {financeQuote} from './financeQuote';
-import {ensureAdminFromEnvironment,ensureAdminPassword} from './adminBootstrap';
+import {configuredAdminBootstrapPassword,ensureAdminFromEnvironment,ensureAdminPassword} from './adminBootstrap';
 import {characterAtXp, progression} from '../src/lib/progression';
 import type {CharacterState} from '../src/types';
 
@@ -477,7 +477,7 @@ async function aiReceipt(state: AuthState, input: JsonObject): Promise<Response>
 }
 
 async function checkAdminBootstrap(req:Request):Promise<Response> {
-  const configured=process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  const configured=configuredAdminBootstrapPassword();
   if (!configured) throw new ApiError(404,'요청한 기능을 찾을 수 없어요.');
   const supplied=req.headers.get('x-admin-bootstrap-secret') ?? '';
   const left=Buffer.from(supplied),right=Buffer.from(configured);

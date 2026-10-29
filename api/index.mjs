@@ -373,6 +373,15 @@ async function financeQuote(req) {
 // server/adminBootstrap.ts
 import { createHmac as createHmac2, randomUUID } from "node:crypto";
 var appliedFingerprint;
+function configuredAdminBootstrapPassword() {
+  const raw = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  if (!raw) return void 0;
+  let value = raw.trim();
+  if (value.length >= 2 && (value[0] === '"' && value.at(-1) === '"' || value[0] === "'" && value.at(-1) === "'")) {
+    value = value.slice(1, -1);
+  }
+  return value;
+}
 async function ensureAdminPassword(password) {
   if (!passwordRule(password)) throw new Error("\uAD00\uB9AC\uC790 \uBE44\uBC00\uBC88\uD638\uB294 8\uC790 \uC774\uC0C1\uC774\uBA70 \uC601\uBB38 \uB300\uBB38\uC790\xB7\uC18C\uBB38\uC790\xB7\uD2B9\uC218\uBB38\uC790\uB97C \uD3EC\uD568\uD574\uC57C \uD574\uC694.");
   const key = Buffer.from(process.env.FIELD_ENCRYPTION_KEY ?? "", "base64");
@@ -439,7 +448,7 @@ async function ensureAdminPassword(password) {
   return result.status;
 }
 async function ensureAdminFromEnvironment() {
-  const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  const password = configuredAdminBootstrapPassword();
   if (password) await ensureAdminPassword(password);
 }
 
@@ -982,7 +991,7 @@ async function aiReceipt(state, input) {
   return response(parseReceiptResponse(raw));
 }
 async function checkAdminBootstrap(req) {
-  const configured = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  const configured = configuredAdminBootstrapPassword();
   if (!configured) throw new ApiError(404, "\uC694\uCCAD\uD55C \uAE30\uB2A5\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
   const supplied = req.headers.get("x-admin-bootstrap-secret") ?? "";
   const left = Buffer.from(supplied), right = Buffer.from(configured);

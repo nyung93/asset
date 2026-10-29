@@ -4,6 +4,16 @@ import {encryptField, hashPassword, normalizeUsername, passwordRule, usernameLoo
 
 let appliedFingerprint: string | undefined;
 
+export function configuredAdminBootstrapPassword(): string | undefined {
+  const raw=process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  if (!raw) return undefined;
+  let value=raw.trim();
+  if (value.length>=2 && ((value[0]==='"' && value.at(-1)==='"') || (value[0]==="'" && value.at(-1)==="'"))) {
+    value=value.slice(1,-1);
+  }
+  return value;
+}
+
 /** Applies a server-only administrator password once for each configured secret. */
 export async function ensureAdminPassword(password: string): Promise<'created'|'updated'|'unchanged'> {
   if (!passwordRule(password)) throw new Error('관리자 비밀번호는 8자 이상이며 영문 대문자·소문자·특수문자를 포함해야 해요.');
@@ -66,6 +76,6 @@ export async function ensureAdminPassword(password: string): Promise<'created'|'
 }
 
 export async function ensureAdminFromEnvironment(): Promise<void> {
-  const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  const password = configuredAdminBootstrapPassword();
   if (password) await ensureAdminPassword(password);
 }

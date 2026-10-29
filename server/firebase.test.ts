@@ -228,7 +228,7 @@ test('admin bootstrap creates or rotates only an administrator and revokes old s
   const db=new MemoryFirestore();
   setDatabaseForTests(db as unknown as Firestore);
   try {
-    process.env.ADMIN_BOOTSTRAP_PASSWORD='Initial!123';
+    process.env.ADMIN_BOOTSTRAP_PASSWORD='  "Initial!123"  ';
     const check=(secret:string)=>new Request(`${origin}/api/index?action=admin-bootstrap-check`,{method:'POST',headers:{origin,'x-admin-bootstrap-secret':secret}});
     assert.equal(await handleRequest(check('wrong')).then(res=>res.status),403);
     assert.deepEqual(await handleRequest(check('Initial!123')).then(res=>res.json()),{status:'created'});
