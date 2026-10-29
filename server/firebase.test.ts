@@ -4,7 +4,7 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import type {Firestore} from 'firebase-admin/firestore';
 import {setDatabaseForTests} from './db';
 import {handleRequest} from './handler';
-import {encryptField,hashPassword,usernameLookup} from './security';
+import {encryptField,hashPassword,tokenHash,usernameLookup} from './security';
 
 type Saved = Record<string,unknown>;
 class MemoryFirestore {
@@ -65,6 +65,7 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     const input={name:'민영',birthDate:'1995-05-12',phone:'010-1234-5678',username:'test1',password:'Test!1234'};
     const registered=await handleRequest(request('register','POST',input));
     assert.equal(registered.status,201);
+    assert.doesNotMatch(registered.headers.getSetCookie()[0],/Max-Age=\d{2,}/);
     const cookie=sessionCookie(registered);
     const user=(await registered.json()).user;
     assert.equal(user.username,'test1');
@@ -89,6 +90,7 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     assert.equal(await handleRequest(request('login','POST',{username:'test1',password:'wrong'})).then(res=>res.status),401);
     const login=await handleRequest(request('login','POST',{username:'test1',password:input.password}));
     assert.equal(login.status,200);
+    assert.doesNotMatch(login.headers.getSetCookie()[0],/Max-Age=\d{2,}/);
     process.env.GEMINI_API_KEY='integration-test-key';
     const summary={yearMonth:'2026-10',totalBudget:100000,totalExpenses:120000,
       topCategory:{categoryName:'식비',codeId:'FO01',amount:120000},investmentReturns:[]};
@@ -133,6 +135,17 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     assert.equal((await handleRequest(request('status','GET',undefined,both)).then(res=>res.json())).user.id,user.id);
     assert.equal(await handleRequest(request('dashboard','GET',undefined,both)).then(res=>res.status),403);
     assert.equal((await handleRequest(request('stop-impersonation','POST',{},both)).then(res=>res.json())).user.id,adminId);
+    const other=await handleRequest(request('register','POST',{
+      name:'다른 회원',birthDate:'1996-06-17',phone:'010-2222-3333',username:'otheruser',password:'Other!1234',
+    }));
+    assert.equal(other.status,201);
+    assert.deepEqual(await handleRequest(request('data','GET',undefined,sessionCookie(other))).then(res=>res.json()),{data:null,version:0});
+    assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(login))).then(res=>res.json())).data,data);
+    const adminSessionId=tokenHash(adminCookie.split('=')[1]);
+    const savedAdminSession=db.rows.get(`sessions/${adminSessionId}`)!;
+    savedAdminSession.last_seen_at=new Date(Date.now()-16*60_000).toISOString();
+    assert.equal(await handleRequest(request('status','GET',undefined,adminCookie)).then(res=>res.status),401);
+    assert.equal(db.rows.has(`sessions/${adminSessionId}`),false);
   } finally {
     globalThis.fetch=originalFetch;
     if(oldGeminiKey===undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=oldGeminiKey;

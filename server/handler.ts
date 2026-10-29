@@ -12,7 +12,7 @@ interface UserRow {
   phone_cipher: string; password_hash: string; role: Role; created_at: string; last_login_at: string | null;
 }
 interface AuthState {primary: UserRow; effective: UserRow; impersonationId?: string}
-interface SessionRow {user_id:string;actor_admin_id:string|null;expires_at:string}
+interface SessionRow {user_id:string;actor_admin_id:string|null;expires_at:string;created_at:string;last_seen_at?:string}
 interface DataRow {data_cipher:string;version:number;transaction_count:number;total_expense:number;total_saving:number;total_xp:number;updated_at:string}
 type JsonObject = Record<string, unknown>;
 
@@ -26,9 +26,10 @@ function response(data: JsonObject, status = 200, cookies: string[] = []): Respo
   return new Response(JSON.stringify(data), {status, headers});
 }
 
-function cookie(req: Request, name: string, value: string, maxAge: number): string {
+function cookie(req: Request, name: string, value: string, maxAge?: number): string {
   const secure = process.env.VERCEL === '1' || new URL(req.url).protocol === 'https:' ? '; Secure' : '';
-  return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
+  const lifetime = maxAge === undefined ? '' : `; Max-Age=${maxAge}`;
+  return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/${lifetime}${secure}`;
 }
 
 function readCookie(req: Request, name: string): string | undefined {
@@ -84,9 +85,19 @@ async function session(token: string | undefined): Promise<(UserRow & {session_i
   const found = await database().collection('sessions').doc(id).get();
   if (!found.exists) return null;
   const saved = found.data() as SessionRow;
-  if (saved.expires_at <= new Date().toISOString()) return null;
+  const now = Date.now();
+  const createdAt = Date.parse(saved.created_at);
+  const lastSeenAt = Date.parse(saved.last_seen_at ?? saved.created_at);
+  const expiresAt = Date.parse(saved.expires_at);
+  // Old 14-day sessions are also constrained by the new absolute and idle limits.
+  if (!Number.isFinite(createdAt) || !Number.isFinite(lastSeenAt) || !Number.isFinite(expiresAt) ||
+      expiresAt <= now || now-createdAt >= 12*60*60_000 || now-lastSeenAt >= 15*60_000) {
+    await database().collection('sessions').doc(id).delete();
+    return null;
+  }
   const user = await database().collection('users').doc(saved.user_id).get();
   if (!user.exists) return null;
+  if (now-lastSeenAt >= 60_000) await database().collection('sessions').doc(id).update({last_seen_at:new Date(now).toISOString()});
   return {...user.data() as UserRow,session_id:id,actor_admin_id:saved.actor_admin_id};
 }
 
@@ -106,10 +117,11 @@ function adminOnly(state: AuthState): void {
 
 async function createSession(userId: string, actorAdminId?: string): Promise<string> {
   const token = newToken();
+  const now = new Date();
   await database().collection('sessions').doc(tokenHash(token)).create({
     user_id:userId,actor_admin_id:actorAdminId ?? null,
-    expires_at:new Date(Date.now()+14*86400_000).toISOString(),created_at:new Date().toISOString(),
-  } satisfies SessionRow & {created_at:string});
+    expires_at:new Date(now.getTime()+12*60*60_000).toISOString(),created_at:now.toISOString(),last_seen_at:now.toISOString(),
+  } satisfies SessionRow);
   return token;
 }
 
@@ -139,7 +151,7 @@ async function register(req: Request, input: JsonObject): Promise<Response> {
     throw error;
   }
   const token = await createSession(id);
-  return response({user:publicUser(row), impersonating:false}, 201, [cookie(req,'rgt_session',token,14*86400)]);
+  return response({user:publicUser(row), impersonating:false}, 201, [cookie(req,'rgt_session',token)]);
 }
 
 let dummyHash: Promise<string> | undefined;
@@ -176,7 +188,7 @@ async function login(req: Request, input: JsonObject): Promise<Response> {
   user.last_login_at = new Date().toISOString();
   await database().collection('users').doc(user.id).update({last_login_at:user.last_login_at});
   const token = await createSession(user.id);
-  return response({user:publicUser(user),impersonating:false},200,[cookie(req,'rgt_session',token,14*86400),cookie(req,'rgt_impersonation','',0)]);
+  return response({user:publicUser(user),impersonating:false},200,[cookie(req,'rgt_session',token),cookie(req,'rgt_impersonation','',0)]);
 }
 
 async function logout(req: Request): Promise<Response> {
@@ -288,7 +300,7 @@ async function impersonate(req: Request,state: AuthState,input: JsonObject): Pro
   if (target.role !== 'USER') throw new ApiError(404,'접속할 회원을 찾을 수 없어요.');
   const token = await createSession(target.id,state.primary.id);
   await audit(state.primary.id,target.id,'IMPERSONATION_START');
-  return response({user:publicUser(target),impersonating:true,adminName:state.primary.name},200,[cookie(req,'rgt_impersonation',token,14*86400)]);
+  return response({user:publicUser(target),impersonating:true,adminName:state.primary.name},200,[cookie(req,'rgt_impersonation',token)]);
 }
 
 async function stopImpersonation(req: Request,state: AuthState): Promise<Response> {

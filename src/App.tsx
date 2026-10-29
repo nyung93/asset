@@ -23,6 +23,8 @@ const tabs = [
   {name: '투자', sub: '포트폴리오', icon: TrendingUp},
   {name: '목표 & 설정', sub: '나의 계획', icon: Settings2},
 ];
+const ACTIVE_TAB_KEY = 'rgt-active-tab-v1';
+const IDLE_TIMEOUT_MS = 15 * 60_000;
 function GameShell({session,onLogout,onImpersonate,onStopImpersonation,onProfileUpdated,syncError,onRetrySync,legacyOffer,onImportLegacy,onDismissLegacy}: {
   session?:AccountSession;onLogout?:()=>Promise<void>;onImpersonate?:(userId:string)=>Promise<void>;
   onStopImpersonation?:()=>Promise<void>;onProfileUpdated?:(user:AccountUser)=>void;
@@ -64,26 +66,91 @@ function AccountApp() {
   const [syncError,setSyncError]=useState('');
   const [legacyOffer,setLegacyOffer]=useState(false);
   const sync=useRef<AccountSync|null>(null);
+  const authChannel=useRef<BroadcastChannel|null>(null);
+  const loggingOut=useRef(false);
+  function lockLocal() {
+    sessionStorage.removeItem(ACTIVE_TAB_KEY);
+    sync.current?.dispose();sync.current=null;
+    useAppStore.getState().resetAppData();
+    setSession(null);setLegacyOffer(false);setSyncError('');
+  }
+  function notifyOtherTabs() {authChannel.current?.postMessage('logout');}
   async function adopt(next:AccountSession) {
     sync.current?.dispose();sync.current=null;
     const result=await accountApi.data();
     useAppStore.getState().replaceAppData(result.data ?? structuredClone(initialData));
     sync.current=new AccountSync(result.version,setSyncError);
     setLegacyOffer(!result.data && !!localStorage.getItem('rich-grandma-tycoon-v1'));
+    sessionStorage.setItem(ACTIVE_TAB_KEY,'1');
+    loggingOut.current=false;
     setSession(next);setSyncError('');setSetupError('');
   }
   useEffect(()=>{
     let alive=true;
-    accountApi.status().then(async next=>{if(alive)await adopt(next);}).catch(error=>{
-      if(alive && error instanceof AccountApiError && error.status!==401) setSetupError(error.message);
-    }).finally(()=>{if(alive)setLoading(false);});
-    return()=>{alive=false;sync.current?.dispose();};
+    const channel=typeof BroadcastChannel==='undefined' ? null : new BroadcastChannel('rgt-session-v1');
+    authChannel.current=channel;
+    if(channel) channel.onmessage=event=>{if(event.data==='logout') lockLocal();};
+    (async()=>{
+      try {
+        // Only a reload of the tab where the user signed in may restore a session.
+        // Opening a link, a new tab or browser history must require login again.
+        const navigation=performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming|undefined;
+        if(sessionStorage.getItem(ACTIVE_TAB_KEY)!=='1' || navigation?.type!=='reload') {
+          lockLocal();
+          await accountApi.logout();
+          if(alive) notifyOtherTabs();
+          return;
+        }
+        const next=await accountApi.status();
+        if(alive) await adopt(next);
+      } catch(error) {
+        if(alive) {
+          lockLocal();
+          if(error instanceof AccountApiError && error.status!==401) setSetupError(error.message);
+        }
+      } finally {if(alive)setLoading(false);}
+    })();
+    return()=>{alive=false;channel?.close();if(authChannel.current===channel)authChannel.current=null;sync.current?.dispose();};
   },[]);
   async function logout() {
-    if(sync.current && !await sync.current.flush()) return;
-    await accountApi.logout();sync.current?.dispose();sync.current=null;
-    useAppStore.getState().resetAppData();setSession(null);setSyncError('');
+    if(loggingOut.current) return;
+    loggingOut.current=true;
+    const pending=sync.current;
+    lockLocal();notifyOtherTabs();
+    const saved=pending ? await Promise.race([pending.flush(),new Promise<boolean>(resolve=>setTimeout(()=>resolve(false),4_000))]) : true;
+    try {
+      await accountApi.logout();
+      if(!saved) setSetupError('로그아웃했지만 마지막 변경사항을 저장하지 못했어요. 다시 로그인해 기록을 확인해 주세요.');
+    } catch {
+      setSetupError('화면은 잠겼지만 서버 로그아웃을 완료하지 못했어요. 연결 상태를 확인해 주세요.');
+    } finally {loggingOut.current=false;}
   }
+  useEffect(()=>{
+    if(!session) return;
+    let lastActivity=Date.now();
+    let timer:ReturnType<typeof setTimeout>;
+    let active=true;
+    const check=()=>{
+      if(!active) return;
+      const remaining=IDLE_TIMEOUT_MS-(Date.now()-lastActivity);
+      if(remaining<=0) {void logout();return;}
+      timer=setTimeout(check,remaining);
+    };
+    const touch=()=>{lastActivity=Date.now();clearTimeout(timer);check();};
+    const visible=()=>{
+      if(document.visibilityState!=='visible') return;
+      if(Date.now()-lastActivity>=IDLE_TIMEOUT_MS) {void logout();return;}
+      void accountApi.status().catch(error=>{
+        if(active && error instanceof AccountApiError && error.status===401) void logout();
+      });
+    };
+    const restored=(event:PageTransitionEvent)=>{if(event.persisted) void logout();};
+    for(const event of ['pointerdown','keydown','touchstart']) window.addEventListener(event,touch,{passive:true});
+    document.addEventListener('visibilitychange',visible);
+    window.addEventListener('pageshow',restored);
+    check();
+    return()=>{active=false;clearTimeout(timer);for(const event of ['pointerdown','keydown','touchstart']) window.removeEventListener(event,touch);document.removeEventListener('visibilitychange',visible);window.removeEventListener('pageshow',restored);};
+  },[session?.user.id]);
   async function impersonate(userId:string) {
     if(sync.current && !await sync.current.flush()) throw new Error('현재 가계부 저장을 마친 뒤 다시 시도해 주세요.');
     const next=await accountApi.impersonate(userId);

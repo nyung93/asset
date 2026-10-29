@@ -15,16 +15,19 @@ async function expectAppNavigation(page:Page) {
 
 async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
   let current=initial;
+  const actions:string[]=[];
   const saves:unknown[]=[];
   let savedData:unknown=null;
   let version=0;
   await page.route('**/api/index?**',async route=>{
     const request=route.request();
     const action=new URL(request.url()).searchParams.get('action');
+    if(action) actions.push(action);
     const payload=request.postDataJSON?.() ?? {};
     const respond=(json:unknown,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(json)});
     if(action==='status') return current==='guest'?respond({error:'로그인이 필요해요.',code:'unauthorized'},401):respond({user:current==='admin'?admin:person,impersonating:false});
-    if(action==='login'||action==='register') {current='user';return respond({user:person,impersonating:false});}
+    if(action==='login') {current=initial==='admin'?'admin':'user';return respond({user:current==='admin'?admin:person,impersonating:false});}
+    if(action==='register') {current='user';return respond({user:person,impersonating:false});}
     if(action==='data'&&request.method()==='GET') return respond({data:savedData,version});
     if(action==='data'&&request.method()==='POST') {saves.push(payload);savedData=payload.data;version++;return respond({version});}
     if(action==='profile') return respond({user:{...person,birthDate:payload.birthDate,phone:payload.phone},impersonating:false});
@@ -35,8 +38,56 @@ async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
     if(action==='logout') {current='guest';return respond({ok:true});}
     return respond({error:'Unknown action'},404);
   });
-  return {saves};
+  return {saves,actions};
 }
+
+async function openAuthenticated(page:Page,role:'user'|'admin') {
+  const api=await mockApi(page,role);
+  await page.goto('/');
+  await page.getByLabel('아이디',{exact:true}).fill(role==='admin'?'grandma_admin':'minyoung');
+  await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
+  await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
+  await expectAppNavigation(page);
+  return api;
+}
+
+test('opening a link with only an old cookie requires a fresh login',async({page})=>{
+  const api=await mockApi(page,'user');
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+  expect(api.actions).toContain('logout');
+  expect(api.actions).not.toContain('data');
+  await page.getByLabel('아이디',{exact:true}).fill('minyoung');
+  await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
+  await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
+  await expectAppNavigation(page);
+  await page.reload();
+  await expectAppNavigation(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+});
+
+test('opening the link in a second tab also closes the first tab session',async({page})=>{
+  let current:'guest'|'user'='guest';
+  await page.context().route('**/api/index?**',route=>{
+    const action=new URL(route.request().url()).searchParams.get('action');
+    const respond=(json:unknown,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(json)});
+    if(action==='login') {current='user';return respond({user:person,impersonating:false});}
+    if(action==='logout') {current='guest';return respond({ok:true});}
+    if(action==='status') return current==='user'?respond({user:person,impersonating:false}):respond({error:'로그인이 필요해요.'},401);
+    if(action==='data') return current==='user'?respond({data:null,version:0}):respond({error:'로그인이 필요해요.'},401);
+    return respond({error:'Unknown action'},404);
+  });
+  await page.goto('/');
+  await page.getByLabel('아이디',{exact:true}).fill('minyoung');
+  await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
+  await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
+  await expectAppNavigation(page);
+  const second=await page.context().newPage();
+  await second.goto('/');
+  await expect(second.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+});
 
 test('first screen gates the app and validates signup fields',async({page})=>{
   await page.goto('/');
@@ -100,7 +151,7 @@ test('login opens account data and immutable profile fields',async({page})=>{
 });
 
 test('admin dashboard lists members and account access can be ended',async({page})=>{
-  await mockApi(page,'admin');await page.goto('/');
+  await openAuthenticated(page,'admin');
   await page.getByRole('button',{name:'관리자',exact:true}).first().click();
   await expect(page.getByRole('heading',{name:'관리자 대시보드'})).toBeVisible();
   await expect(page.getByText('전체 회원')).toBeVisible();
@@ -112,8 +163,7 @@ test('admin dashboard lists members and account access can be ended',async({page
 });
 
 test('authenticated store changes are sent to the account API',async({page})=>{
-  const api=await mockApi(page,'user');await page.goto('/');
-  await expectAppNavigation(page);
+  const api=await openAuthenticated(page,'user');
   await page.evaluate(async()=>{
     const {useAppStore}=await import('/src/store/index.ts');
     useAppStore.getState().saveGoal({year:2026,month:10,targetSavingAmount:50000,targetInvestReturnRate:3});
@@ -130,7 +180,7 @@ test('authenticated store changes are sent to the account API',async({page})=>{
 });
 
 test('My Page character choice saves to the account and follows the user across tabs and reloads',async({page},testInfo)=>{
-  const api=await mockApi(page,'user');await page.goto('/');
+  const api=await openAuthenticated(page,'user');
   await page.getByRole('button',{name:/마이페이지/}).first().click();
   await expect(page.getByRole('heading',{name:'캐릭터 고르기'})).toBeVisible();
   await page.getByRole('button',{name:'저축 지킴이 선택'}).click();

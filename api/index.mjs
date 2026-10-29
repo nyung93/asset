@@ -387,7 +387,8 @@ function response(data, status = 200, cookies = []) {
 }
 function cookie(req, name, value, maxAge) {
   const secure = process.env.VERCEL === "1" || new URL(req.url).protocol === "https:" ? "; Secure" : "";
-  return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAge}${secure}`;
+  const lifetime = maxAge === void 0 ? "" : `; Max-Age=${maxAge}`;
+  return `${name}=${value}; HttpOnly; SameSite=Lax; Path=/${lifetime}${secure}`;
 }
 function readCookie(req, name) {
   const entry = (req.headers.get("cookie") ?? "").split(";").map((part) => part.trim()).find((part) => part.startsWith(`${name}=`));
@@ -442,9 +443,17 @@ async function session(token) {
   const found = await database().collection("sessions").doc(id).get();
   if (!found.exists) return null;
   const saved = found.data();
-  if (saved.expires_at <= (/* @__PURE__ */ new Date()).toISOString()) return null;
+  const now = Date.now();
+  const createdAt = Date.parse(saved.created_at);
+  const lastSeenAt = Date.parse(saved.last_seen_at ?? saved.created_at);
+  const expiresAt = Date.parse(saved.expires_at);
+  if (!Number.isFinite(createdAt) || !Number.isFinite(lastSeenAt) || !Number.isFinite(expiresAt) || expiresAt <= now || now - createdAt >= 12 * 60 * 6e4 || now - lastSeenAt >= 15 * 6e4) {
+    await database().collection("sessions").doc(id).delete();
+    return null;
+  }
   const user = await database().collection("users").doc(saved.user_id).get();
   if (!user.exists) return null;
+  if (now - lastSeenAt >= 6e4) await database().collection("sessions").doc(id).update({ last_seen_at: new Date(now).toISOString() });
   return { ...user.data(), session_id: id, actor_admin_id: saved.actor_admin_id };
 }
 async function auth(req) {
@@ -461,11 +470,13 @@ function adminOnly(state) {
 }
 async function createSession(userId, actorAdminId) {
   const token = newToken();
+  const now = /* @__PURE__ */ new Date();
   await database().collection("sessions").doc(tokenHash(token)).create({
     user_id: userId,
     actor_admin_id: actorAdminId ?? null,
-    expires_at: new Date(Date.now() + 14 * 864e5).toISOString(),
-    created_at: (/* @__PURE__ */ new Date()).toISOString()
+    expires_at: new Date(now.getTime() + 12 * 60 * 6e4).toISOString(),
+    created_at: now.toISOString(),
+    last_seen_at: now.toISOString()
   });
   return token;
 }
@@ -504,7 +515,7 @@ async function register(req, input) {
     throw error;
   }
   const token = await createSession(id);
-  return response({ user: publicUser(row), impersonating: false }, 201, [cookie(req, "rgt_session", token, 14 * 86400)]);
+  return response({ user: publicUser(row), impersonating: false }, 201, [cookie(req, "rgt_session", token)]);
 }
 var dummyHash;
 async function login(req, input) {
@@ -545,7 +556,7 @@ async function login(req, input) {
   user.last_login_at = (/* @__PURE__ */ new Date()).toISOString();
   await database().collection("users").doc(user.id).update({ last_login_at: user.last_login_at });
   const token = await createSession(user.id);
-  return response({ user: publicUser(user), impersonating: false }, 200, [cookie(req, "rgt_session", token, 14 * 86400), cookie(req, "rgt_impersonation", "", 0)]);
+  return response({ user: publicUser(user), impersonating: false }, 200, [cookie(req, "rgt_session", token), cookie(req, "rgt_impersonation", "", 0)]);
 }
 async function logout(req) {
   const primary = readCookie(req, "rgt_session"), impersonated = readCookie(req, "rgt_impersonation");
@@ -675,7 +686,7 @@ async function impersonate(req, state, input) {
   if (target.role !== "USER") throw new ApiError(404, "\uC811\uC18D\uD560 \uD68C\uC6D0\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
   const token = await createSession(target.id, state.primary.id);
   await audit(state.primary.id, target.id, "IMPERSONATION_START");
-  return response({ user: publicUser(target), impersonating: true, adminName: state.primary.name }, 200, [cookie(req, "rgt_impersonation", token, 14 * 86400)]);
+  return response({ user: publicUser(target), impersonating: true, adminName: state.primary.name }, 200, [cookie(req, "rgt_impersonation", token)]);
 }
 async function stopImpersonation(req, state) {
   if (!state.impersonationId) throw new ApiError(400, "\uD68C\uC6D0 \uACC4\uC815 \uC811\uC18D \uC911\uC774 \uC544\uB2C8\uC5D0\uC694.");
