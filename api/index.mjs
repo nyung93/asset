@@ -686,7 +686,7 @@ async function updateProfile(req, state, input) {
 function appData(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError(400, "\uC800\uC7A5\uD560 \uB370\uC774\uD130\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.");
   const data = input;
-  if (!data.character || !Array.isArray(data.budgetCodes) || !Array.isArray(data.transactions) || !Array.isArray(data.goals) || !Array.isArray(data.investments) || !Array.isArray(data.xpLogs)) throw new ApiError(400, "\uC800\uC7A5\uD560 \uB370\uC774\uD130\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.");
+  if (!data.character || !Array.isArray(data.budgetCodes) || !Array.isArray(data.transactions) || !Array.isArray(data.goals) || !Array.isArray(data.investments) || !Array.isArray(data.xpLogs) || data.recurringExpenses !== void 0 && !Array.isArray(data.recurringExpenses) || data.recurringExpensePayments !== void 0 && !Array.isArray(data.recurringExpensePayments)) throw new ApiError(400, "\uC800\uC7A5\uD560 \uB370\uC774\uD130\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.");
   return data;
 }
 function metrics(data) {

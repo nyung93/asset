@@ -83,7 +83,8 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
 
     const initial=await handleRequest(request('data','GET',undefined,cookie,user.id));
     assert.deepEqual(await initial.json(),{data:null,version:0});
-    const data={character:{totalXp:10},budgetCodes:[],transactions:[{type:'EXPENSE',amount:15000}],goals:[],investments:[],xpLogs:[]};
+    const data={character:{totalXp:10},budgetCodes:[],transactions:[{type:'EXPENSE',amount:15000}],goals:[],investments:[],xpLogs:[],
+      recurringExpenses:[{id:'rent',name:'월세',day:31,amount:500000,codeId:'HO01',startMonth:'2026-10'}],recurringExpensePayments:[]};
     const first=await handleRequest(request('data','POST',{data,version:0},cookie,user.id));
     assert.deepEqual(await first.json(),{version:1});
     assert.equal(await handleRequest(request('data','POST',{data,version:0},cookie,user.id)).then(res=>res.status),409);

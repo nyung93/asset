@@ -300,7 +300,7 @@ async function updateProfile(req:Request,state: AuthState, input: JsonObject): P
 function appData(input: unknown): JsonObject {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new ApiError(400,'저장할 데이터가 올바르지 않아요.');
   const data = input as JsonObject;
-  if (!data.character || !Array.isArray(data.budgetCodes) || !Array.isArray(data.transactions) || !Array.isArray(data.goals) || !Array.isArray(data.investments) || !Array.isArray(data.xpLogs)) throw new ApiError(400,'저장할 데이터가 올바르지 않아요.');
+  if (!data.character || !Array.isArray(data.budgetCodes) || !Array.isArray(data.transactions) || !Array.isArray(data.goals) || !Array.isArray(data.investments) || !Array.isArray(data.xpLogs) || (data.recurringExpenses!==undefined && !Array.isArray(data.recurringExpenses)) || (data.recurringExpensePayments!==undefined && !Array.isArray(data.recurringExpensePayments))) throw new ApiError(400,'저장할 데이터가 올바르지 않아요.');
   return data;
 }
 

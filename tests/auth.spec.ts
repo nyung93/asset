@@ -207,6 +207,42 @@ test('authenticated store changes are sent to the account API',async({page})=>{
   expect(restored).toContainEqual({year:2026,month:10,targetSavingAmount:50000,targetInvestReturnRate:3});
 });
 
+test('recurring expense due dates and monthly paid checks survive reload',async({page},testInfo)=>{
+  const api=await openAuthenticated(page,'user');
+  const nav=page.viewportSize()!.width<768
+    ? page.getByRole('navigation',{name:'하단 탭'})
+    : page.getByRole('navigation',{name:'메인 메뉴'});
+  await nav.getByRole('button',{name:/목표 & 설정/}).click();
+  if(page.viewportSize()!.width>=768) {
+    const cards=await page.locator('.goal-card').evaluateAll(elements=>elements.map(element=>element.getBoundingClientRect().width));
+    expect(Math.abs(cards[0]-cards[1])).toBeLessThan(1);
+  }
+  await page.getByLabel('목표 및 정기 지출 조회 월').fill('2028-02');
+  await page.getByRole('button',{name:'지출 추가'}).click();
+  await page.getByLabel('지출 이름').fill('월세');
+  await page.getByLabel('매월 납부일').fill('31');
+  await page.getByLabel('예정 금액 (원)').fill('500000');
+  await page.getByRole('button',{name:'저장하기',exact:true}).last().click();
+  await expect(page.getByRole('heading',{name:'정기 지출'})).toBeVisible();
+  await expect(page.getByText('월말 납부')).toBeVisible();
+  await expect(page.getByText('500,000원').first()).toBeVisible();
+  await page.locator('section[aria-labelledby="recurring-title"]').screenshot({path:testInfo.outputPath('recurring-expenses.png')});
+  const paid=page.getByRole('checkbox',{name:'월세 2028-02 납부 완료'});
+  await expect(paid).not.toBeChecked();
+  await paid.check();
+  await expect(paid).toBeChecked();
+  await expect.poll(()=>(api.saves.at(-1) as {data?:{recurringExpensePayments?:unknown[]}}|undefined)?.data?.recurringExpensePayments?.length).toBe(1);
+  await page.getByLabel('목표 및 정기 지출 조회 월').fill('2028-03');
+  await expect(page.getByRole('checkbox',{name:'월세 2028-03 납부 완료'})).not.toBeChecked();
+  await page.getByLabel('목표 및 정기 지출 조회 월').fill('2028-02');
+  await expect(paid).toBeChecked();
+  await page.reload();
+  await expectAppNavigation(page);
+  await nav.getByRole('button',{name:/목표 & 설정/}).click();
+  await page.getByLabel('목표 및 정기 지출 조회 월').fill('2028-02');
+  await expect(page.getByRole('checkbox',{name:'월세 2028-02 납부 완료'})).toBeChecked();
+});
+
 test('switching accounts loads only the signed-in member’s saved data',async({page})=>{
   type Key='alice'|'bob';
   let current:Key|null=null;

@@ -4,7 +4,7 @@ import { getSettlementMissions, latestAnnualInvestments, portfolioGoalStatus } f
 import { getCharacterMood } from './characterMood';
 import type { AppData, InvestmentMonthly } from '../types';
 const investment: InvestmentMonthly = {invId:'i1',yearMonth:'2026-10',ticker:'AAPL',tickerName:'Apple',currency:'USD',quantity:10,purchasePrice:100,investedPrincipal:1000,currentValuation:1100,valuationSource:'market'};
-const empty = (): AppData => ({character:{totalXp:0,level:1,currentXp:0,houseStage:1,isCustomized:false,avatar:{hair:1,eyes:1,face:1,skin:1,top:1,bottom:1,shoes:1}},budgetCodes:[{codeId:'FO01',categoryName:'식비',monthlyLimit:100}],goals:[],investments:[],transactions:[],xpLogs:[]});
+const empty = (): AppData => ({character:{totalXp:0,level:1,currentXp:0,houseStage:1,isCustomized:false,avatar:{hair:1,eyes:1,face:1,skin:1,top:1,bottom:1,shoes:1}},budgetCodes:[{codeId:'FO01',categoryName:'식비',monthlyLimit:100}],goals:[],investments:[],transactions:[],xpLogs:[],recurringExpenses:[],recurringExpensePayments:[]});
 
 test('bonus requirements distinguish unset goals, exact thresholds and over-budget', () => {
   const data = empty();

@@ -5,12 +5,13 @@ import { getSettlementMissions, type BonusRewardType } from '../lib/XpSettlement
 import { applyQuotes, carryInvestmentsForward } from '../lib/investments';
 import { isValidDate, todayDate } from '../lib/calendar';
 import { DEFAULT_AVATAR_CONFIG } from '../lib/avatar';
-import type { AppData, AvatarConfig, BudgetCode, CharacterImageId, Goal, InvestmentMonthly, MarketQuote, Transaction, XpLog } from '../types';
+import {validYearMonth} from '../lib/recurringExpenses';
+import type { AppData, AvatarConfig, BudgetCode, CharacterImageId, Goal, InvestmentMonthly, MarketQuote, RecurringExpense, Transaction, XpLog } from '../types';
 export const HOUSE_NAMES = HOUSE_STAGES.map(stage => stage.name);
 export const initialData: AppData = {
   character: { totalXp: 0, level: 1, currentXp: 0, houseStage: 1, avatar: {...DEFAULT_AVATAR_CONFIG}, isCustomized: false },
   budgetCodes: [ {codeId:'FO01',categoryName:'식비',monthlyLimit:400000}, {codeId:'SH01',categoryName:'쇼핑/뷰티',monthlyLimit:200000}, {codeId:'HO01',categoryName:'고정주거비',monthlyLimit:600000}, {codeId:'TR01',categoryName:'교통',monthlyLimit:100000}, {codeId:'LE01',categoryName:'문화/여가',monthlyLimit:150000} ],
-  transactions: [], goals: [], investments: [], xpLogs: [],
+  transactions: [], goals: [], investments: [], xpLogs: [], recurringExpenses: [], recurringExpensePayments: [],
 };
 function nonnegative(n: number) { return Number.isFinite(n) && n >= 0; }
 const validDate = isValidDate;
@@ -23,6 +24,8 @@ function growCharacter(character: AppData['character'], xp: number): AppData['ch
 }
 export function migrateAppData(saved: Partial<AppData>, version: number): AppData {
   const data = {...structuredClone(initialData), ...saved};
+  data.recurringExpenses = Array.isArray(saved.recurringExpenses) ? saved.recurringExpenses : [];
+  data.recurringExpensePayments = Array.isArray(saved.recurringExpensePayments) ? saved.recurringExpensePayments : [];
   const character = {...initialData.character, ...saved.character};
   const loggedXp = data.xpLogs.reduce((sum, log) => sum + (Number.isSafeInteger(log.xpAmount) && log.xpAmount > 0 ? log.xpAmount : 0), 0);
   // Version 1 used level × 100 XP per level; recover all previously earned XP.
@@ -39,6 +42,9 @@ interface Actions {
   saveBudgetCode: (code: BudgetCode, originalId?: string) => void;
   deleteBudgetCode: (codeId: string) => void;
   saveGoal: (goal: Goal) => void;
+  saveRecurringExpense: (expense: RecurringExpense) => void;
+  deleteRecurringExpense: (id: string) => void;
+  toggleRecurringExpensePaid: (id: string, yearMonth: string) => void;
   saveTransaction: (tx: Transaction) => void;
   saveTransactionWithDailyReward: (tx: Transaction) => boolean;
   deleteTransaction: (id: string) => void;
@@ -67,15 +73,34 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
     if (!code.categoryName || !Number.isSafeInteger(code.monthlyLimit) || !nonnegative(code.monthlyLimit)) throw new Error('카테고리명과 0 이상의 정수 예산을 입력해 주세요.');
     if (originalId && !get().budgetCodes.some(c => c.codeId === originalId)) throw new Error('수정할 코드가 없습니다.');
     if (get().budgetCodes.some(c => c.codeId === code.codeId && c.codeId !== originalId)) throw new Error('이미 사용 중인 코드입니다.');
-    set(s => ({ budgetCodes: originalId ? s.budgetCodes.map(c => c.codeId === originalId ? code : c) : [...s.budgetCodes, code], transactions: s.transactions.map(t => t.codeId === originalId ? {...t, codeId: code.codeId} : t) }));
+    set(s => ({ budgetCodes: originalId ? s.budgetCodes.map(c => c.codeId === originalId ? code : c) : [...s.budgetCodes, code], transactions: s.transactions.map(t => t.codeId === originalId ? {...t, codeId: code.codeId} : t), recurringExpenses:s.recurringExpenses.map(item=>item.codeId===originalId ? {...item,codeId:code.codeId} : item) }));
   },
   deleteBudgetCode: codeId => {
-    if (get().transactions.some(t => t.codeId === codeId)) throw new Error('거래에 사용된 코드는 삭제할 수 없습니다.');
+    if (get().transactions.some(t => t.codeId === codeId) || get().recurringExpenses.some(item=>item.codeId===codeId)) throw new Error('가계부 또는 정기 지출에 사용된 코드는 삭제할 수 없습니다.');
     set(s => ({budgetCodes:s.budgetCodes.filter(c => c.codeId !== codeId)}));
   },
   saveGoal: goal => {
     if (!Number.isInteger(goal.year) || goal.year < 1900 || goal.year > 9999 || !Number.isInteger(goal.month) || goal.month < 0 || goal.month > 12 || !Number.isSafeInteger(goal.targetSavingAmount) || !nonnegative(goal.targetSavingAmount) || !Number.isFinite(goal.targetInvestReturnRate) || goal.targetInvestReturnRate < -100) throw new Error('저축액은 0 이상의 정수, 수익률은 -100% 이상으로 입력해 주세요.');
     set(s => ({goals:[...s.goals.filter(g => !(g.year === goal.year && g.month === goal.month)), {...goal}]}));
+  },
+  saveRecurringExpense: input => {
+    const expense={...input,name:input.name.trim()};
+    if(!expense.id || expense.id.length>64 || !expense.name || expense.name.length>40 || !Number.isInteger(expense.day) || expense.day<1 || expense.day>31 || !Number.isSafeInteger(expense.amount) || expense.amount<=0 || !validYearMonth(expense.startMonth) || !get().budgetCodes.some(code=>code.codeId===expense.codeId)) throw new Error('이름·납부일·금액·카테고리를 확인해 주세요.');
+    set(s=>({recurringExpenses:[...s.recurringExpenses.filter(item=>item.id!==expense.id),expense]}));
+  },
+  deleteRecurringExpense: id => set(s=>({
+    recurringExpenses:s.recurringExpenses.filter(item=>item.id!==id),
+    recurringExpensePayments:s.recurringExpensePayments.filter(item=>item.expenseId!==id),
+  })),
+  toggleRecurringExpensePaid: (id,yearMonth) => {
+    const expense=get().recurringExpenses.find(item=>item.id===id);
+    if(!expense || !validYearMonth(yearMonth) || yearMonth<expense.startMonth) throw new Error('정기 지출과 조회 월을 확인해 주세요.');
+    set(s=>{
+      const paid=s.recurringExpensePayments.some(item=>item.expenseId===id && item.yearMonth===yearMonth);
+      return {recurringExpensePayments:paid
+        ? s.recurringExpensePayments.filter(item=>!(item.expenseId===id && item.yearMonth===yearMonth))
+        : [...s.recurringExpensePayments,{expenseId:id,yearMonth,paidOn:todayDate()}]};
+    });
   },
   saveTransaction: tx => {
     validateTransaction(tx, get().budgetCodes);
@@ -161,4 +186,4 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
       return {xpLogs:[...s.xpLogs,{...log}],character:growCharacter(s.character, log.xpAmount)};
     }); return true;
   },
-}), {name:'rich-grandma-tycoon-v1',version:2,storage,migrate: (saved, version) => migrateAppData(saved as Partial<AppData>, version),merge: (saved, current) => ({...current, ...migrateAppData((saved ?? {}) as Partial<AppData>, 2)}),partialize: s => ({character:s.character,budgetCodes:s.budgetCodes,transactions:s.transactions,goals:s.goals,investments:s.investments,xpLogs:s.xpLogs})}));
+}), {name:'rich-grandma-tycoon-v1',version:2,storage,migrate: (saved, version) => migrateAppData(saved as Partial<AppData>, version),merge: (saved, current) => ({...current, ...migrateAppData((saved ?? {}) as Partial<AppData>, 2)}),partialize: s => ({character:s.character,budgetCodes:s.budgetCodes,transactions:s.transactions,goals:s.goals,investments:s.investments,xpLogs:s.xpLogs,recurringExpenses:s.recurringExpenses,recurringExpensePayments:s.recurringExpensePayments})}));

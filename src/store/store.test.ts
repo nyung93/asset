@@ -31,6 +31,31 @@ test('annual and monthly goals upsert independently and reject invalid values',(
  useAppStore.persist.rehydrate();
  assert.equal(useAppStore.getState().goals.length,2);
 });
+test('recurring expenses keep independent monthly checks and persist with the account snapshot',()=>{
+ const s=useAppStore.getState();
+ const rent={id:'rent',name:'월세',day:31,amount:500000,codeId:'HO01',startMonth:'2026-01'};
+ s.saveRecurringExpense(rent);
+ assert.throws(()=>s.saveRecurringExpense({...rent,amount:-1}));
+ assert.throws(()=>s.deleteBudgetCode('HO01'));
+ s.toggleRecurringExpensePaid('rent','2026-02');
+ assert.equal(useAppStore.getState().recurringExpensePayments.length,1);
+ assert.equal(useAppStore.getState().transactions.length,0);
+ assert.equal(useAppStore.getState().recurringExpensePayments[0].yearMonth,'2026-02');
+ assert.throws(()=>s.toggleRecurringExpensePaid('rent','2025-12'));
+ s.saveBudgetCode({codeId:'HO02',categoryName:'주거비',monthlyLimit:600000},'HO01');
+ assert.equal(useAppStore.getState().recurringExpenses[0].codeId,'HO02');
+ const stored=memory.get('rich-grandma-tycoon-v1')!;
+ useAppStore.setState({recurringExpenses:[],recurringExpensePayments:[]});
+ memory.set('rich-grandma-tycoon-v1',stored);
+ useAppStore.persist.rehydrate();
+ assert.equal(useAppStore.getState().recurringExpenses.length,1);
+ assert.equal(useAppStore.getState().recurringExpensePayments.length,1);
+ s.toggleRecurringExpensePaid('rent','2026-02');
+ assert.equal(useAppStore.getState().recurringExpensePayments.length,0);
+ s.deleteRecurringExpense('rent');
+ s.deleteBudgetCode('HO02');
+ assert.equal(useAppStore.getState().recurringExpenses.length,0);
+});
 test('XP is awarded once per reward and period and grows character and house',()=>{
  const s=useAppStore.getState();
  const log={logId:'xp1',earnedDate:'2026-10-21',rewardType:'DAILY_LOG' as const,referencePeriod:'2026-10-21',xpAmount:1500};

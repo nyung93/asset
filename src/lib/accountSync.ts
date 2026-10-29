@@ -3,8 +3,8 @@ import {useAppStore} from '../store';
 import {accountApi} from './accountApi';
 
 export function snapshot():AppData {
-  const {character,budgetCodes,transactions,goals,investments,xpLogs}=useAppStore.getState();
-  return {character,budgetCodes,transactions,goals,investments,xpLogs};
+  const {character,budgetCodes,transactions,goals,investments,xpLogs,recurringExpenses,recurringExpensePayments}=useAppStore.getState();
+  return {character,budgetCodes,transactions,goals,investments,xpLogs,recurringExpenses,recurringExpensePayments};
 }
 
 /** Serializes writes and rejects stale versions, keeping server data account-scoped. */
@@ -16,7 +16,7 @@ export class AccountSync {
   error='';
   constructor(private version:number,private userId:string,private onError:(message:string)=>void) {
     this.unsubscribe=useAppStore.subscribe((next,previous)=>{
-      if (next.character===previous.character && next.budgetCodes===previous.budgetCodes && next.transactions===previous.transactions && next.goals===previous.goals && next.investments===previous.investments && next.xpLogs===previous.xpLogs) return;
+      if (next.character===previous.character && next.budgetCodes===previous.budgetCodes && next.transactions===previous.transactions && next.goals===previous.goals && next.investments===previous.investments && next.xpLogs===previous.xpLogs && next.recurringExpenses===previous.recurringExpenses && next.recurringExpensePayments===previous.recurringExpensePayments) return;
       this.pending=snapshot();
       if(this.timer) clearTimeout(this.timer);
       this.timer=setTimeout(()=>{void this.flush();},350);

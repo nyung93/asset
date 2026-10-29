@@ -14,6 +14,8 @@ export interface CharacterState { totalXp: number; level: number; currentXp: num
 export interface BudgetCode { codeId: string; categoryName: string; monthlyLimit: number }
 export interface Transaction { txId: string; txDate: string; type: 'INCOME' | 'EXPENSE' | 'SAVING'; codeId: string; amount: number; memo: string }
 export interface Goal { year: number; month: number; targetSavingAmount: number; targetInvestReturnRate: number }
+export interface RecurringExpense { id: string; name: string; day: number; amount: number; codeId: string; startMonth: string }
+export interface RecurringExpensePayment { expenseId: string; yearMonth: string; paidOn: string }
 export interface InvestmentMonthly {
   invId: string;
   yearMonth: string;
@@ -31,7 +33,7 @@ export interface InvestmentMonthly {
   valuationSource?: 'market' | 'principal';
 }
 export interface XpLog { logId: string; earnedDate: string; rewardType: 'DAILY_LOG' | 'MONTHLY_BUDGET' | 'MONTHLY_SAVING' | 'MONTHLY_INVEST' | 'ANNUAL_GOAL'; referencePeriod: string; xpAmount: number }
-export interface AppData { character: CharacterState; budgetCodes: BudgetCode[]; transactions: Transaction[]; goals: Goal[]; investments: InvestmentMonthly[]; xpLogs: XpLog[] }
+export interface AppData { character: CharacterState; budgetCodes: BudgetCode[]; transactions: Transaction[]; goals: Goal[]; investments: InvestmentMonthly[]; xpLogs: XpLog[]; recurringExpenses: RecurringExpense[]; recurringExpensePayments: RecurringExpensePayment[] }
 
 export type InvestmentCurrency = 'KRW' | 'USD';
 export interface Stock {
