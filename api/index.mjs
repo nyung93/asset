@@ -1,5 +1,5 @@
 // server/handler.ts
-import { randomUUID as randomUUID2 } from "node:crypto";
+import { randomUUID as randomUUID2, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 
 // server/db.ts
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
@@ -981,18 +981,34 @@ async function aiReceipt(state, input) {
   const raw = await generateGemini({ systemPrompt: RECEIPT_PROMPT, prompt: "\uC774 \uC774\uBBF8\uC9C0\uC758 \uACB0\uC81C \uB0B4\uC5ED \uD558\uB098\uB97C \uC9C0\uC815\uD55C JSON\uC73C\uB85C \uCD94\uCD9C\uD574 \uC918.", imageBase64: encoded, json: true });
   return response(parseReceiptResponse(raw));
 }
+async function checkAdminBootstrap(req) {
+  const configured = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  if (!configured) throw new ApiError(404, "\uC694\uCCAD\uD55C \uAE30\uB2A5\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
+  const supplied = req.headers.get("x-admin-bootstrap-secret") ?? "";
+  const left = Buffer.from(supplied), right = Buffer.from(configured);
+  if (left.length !== right.length || !timingSafeEqual2(left, right)) throw new ApiError(403, "\uAD00\uB9AC\uC790 \uC124\uC815\uC744 \uD655\uC778\uD560 \uC218 \uC5C6\uC5B4\uC694.", "bootstrap_secret_mismatch");
+  try {
+    return response({ status: await ensureAdminPassword(configured) });
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("\uAD00\uB9AC\uC790 \uACC4\uC815\uACFC \uC5F0\uACB0\uB418\uC9C0")) throw new ApiError(409, "admin \uC544\uC774\uB514\uAC00 \uC77C\uBC18 \uD68C\uC6D0 \uACC4\uC815\uC73C\uB85C \uC0AC\uC6A9 \uC911\uC774\uC5D0\uC694.", "admin_username_conflict");
+    if (error instanceof Error && error.message.includes("\uC0C9\uC778\uC774 \uC190\uC0C1")) throw new ApiError(409, "admin \uACC4\uC815 \uC0C9\uC778\uC744 \uD655\uC778\uD574\uC57C \uD574\uC694.", "admin_index_conflict");
+    if (error instanceof Error && error.message.includes("\uBE44\uBC00\uBC88\uD638\uB294")) throw new ApiError(400, "\uAD00\uB9AC\uC790 \uBE44\uBC00\uBC88\uD638 \uADDC\uCE59\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.", "bootstrap_password_rule");
+    throw new ApiError(503, "\uAD00\uB9AC\uC790 \uACC4\uC815 \uC124\uC815\uC774 \uC644\uB8CC\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694. \uC11C\uBC84 \uB85C\uADF8\uB97C \uD655\uC778\uD574 \uC8FC\uC138\uC694.", "bootstrap_failed");
+  }
+}
 async function handleRequest(req) {
   try {
     if (req.method !== "GET" && req.method !== "POST") throw new ApiError(405, "\uC9C0\uC6D0\uD558\uC9C0 \uC54A\uB294 \uC694\uCCAD\uC774\uC5D0\uC694.");
     if (req.method === "POST") sameOrigin(req);
     if (req.method === "GET" && new URL(req.url).searchParams.get("action") === "finance-quote") return await financeQuote(req);
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY, "base64").length !== 32) throw new ApiError(503, "Firebase \uC5F0\uACB0\uC744 \uC900\uBE44\uD558\uACE0 \uC788\uC5B4\uC694.", "setup_required");
+    const action = new URL(req.url).searchParams.get("action");
+    if (req.method === "POST" && action === "admin-bootstrap-check") return await checkAdminBootstrap(req);
     try {
       await ensureAdminFromEnvironment();
     } catch {
       console.error("Administrator bootstrap failed; normal requests remain available.");
     }
-    const action = new URL(req.url).searchParams.get("action");
     if (req.method === "POST" && action === "register") return await register(req, await body(req));
     if (req.method === "POST" && action === "login") return await login(req, await body(req));
     if (req.method === "POST" && action === "logout") return await logout(req);

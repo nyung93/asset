@@ -1,11 +1,11 @@
-import {randomUUID} from 'node:crypto';
+import {randomUUID,timingSafeEqual} from 'node:crypto';
 import {database, firebaseConfigured} from './db';
 import {decryptField, encryptField, hashPassword, newToken, normalizeUsername, passwordRule, tokenHash, usernameLookup, verifyPassword} from './security';
 import {GeminiRequestError, generateGemini} from './gemini';
 import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
 import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
 import {financeQuote} from './financeQuote';
-import {ensureAdminFromEnvironment} from './adminBootstrap';
+import {ensureAdminFromEnvironment,ensureAdminPassword} from './adminBootstrap';
 import {characterAtXp, progression} from '../src/lib/progression';
 import type {CharacterState} from '../src/types';
 
@@ -476,6 +476,21 @@ async function aiReceipt(state: AuthState, input: JsonObject): Promise<Response>
   return response(parseReceiptResponse(raw) as unknown as JsonObject);
 }
 
+async function checkAdminBootstrap(req:Request):Promise<Response> {
+  const configured=process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  if (!configured) throw new ApiError(404,'요청한 기능을 찾을 수 없어요.');
+  const supplied=req.headers.get('x-admin-bootstrap-secret') ?? '';
+  const left=Buffer.from(supplied),right=Buffer.from(configured);
+  if (left.length!==right.length || !timingSafeEqual(left,right)) throw new ApiError(403,'관리자 설정을 확인할 수 없어요.','bootstrap_secret_mismatch');
+  try {return response({status:await ensureAdminPassword(configured)});}
+  catch(error) {
+    if (error instanceof Error && error.message.includes('관리자 계정과 연결되지')) throw new ApiError(409,'admin 아이디가 일반 회원 계정으로 사용 중이에요.','admin_username_conflict');
+    if (error instanceof Error && error.message.includes('색인이 손상')) throw new ApiError(409,'admin 계정 색인을 확인해야 해요.','admin_index_conflict');
+    if (error instanceof Error && error.message.includes('비밀번호는')) throw new ApiError(400,'관리자 비밀번호 규칙을 확인해 주세요.','bootstrap_password_rule');
+    throw new ApiError(503,'관리자 계정 설정이 완료되지 않았어요. 서버 로그를 확인해 주세요.','bootstrap_failed');
+  }
+}
+
 export async function handleRequest(req: Request): Promise<Response> {
   try {
     if (req.method !== 'GET' && req.method !== 'POST') throw new ApiError(405,'지원하지 않는 요청이에요.');
@@ -483,9 +498,10 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (req.method === 'GET' && new URL(req.url).searchParams.get('action') === 'finance-quote') return await financeQuote(req);
     // Missing secrets fail closed; the app never falls back to shared browser data.
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY,'base64').length!==32) throw new ApiError(503,'Firebase 연결을 준비하고 있어요.','setup_required');
+    const action = new URL(req.url).searchParams.get('action');
+    if (req.method === 'POST' && action === 'admin-bootstrap-check') return await checkAdminBootstrap(req);
     try {await ensureAdminFromEnvironment();}
     catch {console.error('Administrator bootstrap failed; normal requests remain available.');}
-    const action = new URL(req.url).searchParams.get('action');
     if (req.method === 'POST' && action === 'register') return await register(req,await body(req));
     if (req.method === 'POST' && action === 'login') return await login(req,await body(req));
     if (req.method === 'POST' && action === 'logout') return await logout(req);
