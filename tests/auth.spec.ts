@@ -70,6 +70,20 @@ test('opening a link with only an old cookie requires a fresh login',async({page
   await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
 });
 
+test('admin setup is reachable by direct link and never advertised on the login screen',async({page})=>{
+  await page.route('**/api/index?action=admin-setup',route=>route.fulfill({status:200,contentType:'application/json',body:'{"ok":true}'}));
+  await page.goto('/');
+  await expect(page.getByRole('link',{name:/관리자 계정 설정/})).toHaveCount(0);
+  await page.goto('/admin/setup');
+  await expect(page.getByRole('heading',{name:'관리자 계정 설정'})).toBeVisible();
+  await page.getByLabel('관리자 설정 코드').fill('fixture-setup-token');
+  await page.getByLabel('새 비밀번호').fill('Fixture!123');
+  await page.getByLabel('비밀번호 확인').fill('Fixture!123');
+  await page.getByRole('button',{name:'관리자 계정 만들기'}).click();
+  await expect(page.getByText('관리자 계정 설정이 완료됐어요.')).toBeVisible();
+  await expect(page.getByRole('link',{name:'로그인 화면으로 이동'})).toHaveAttribute('href','/');
+});
+
 test('saved ID and opted-in automatic login survive a new visit, then logout revokes them',async({page})=>{
   const api=await mockApi(page,'guest');
   await page.goto('/');

@@ -5,14 +5,13 @@ import {GeminiRequestError, generateGemini} from './gemini';
 import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
 import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
 import {financeQuote} from './financeQuote';
-import {configuredAdminBootstrapPassword,ensureAdminFromEnvironment,ensureAdminPassword} from './adminBootstrap';
 import {characterAtXp, progression} from '../src/lib/progression';
 import type {CharacterState} from '../src/types';
 
 type Role = 'USER' | 'ADMIN';
 interface UserRow {
   id: string; name: string; username_cipher: string; birth_date_cipher: string;
-  phone_cipher: string; password_hash: string; role: Role; created_at: string; last_login_at: string | null;
+  phone_cipher: string; password_hash: string; role: Role; created_at: string; last_login_at: string | null; password_changed_at?: string;
 }
 interface AuthState {primary: UserRow; effective: UserRow; impersonationId?: string}
 interface SessionRow {user_id:string;actor_admin_id:string|null;expires_at:string;created_at:string;last_seen_at?:string}
@@ -102,6 +101,10 @@ async function session(token: string | undefined): Promise<(UserRow & {session_i
   }
   const user = await database().collection('users').doc(saved.user_id).get();
   if (!user.exists) return null;
+  if (user.data()?.password_changed_at && createdAt < Date.parse(user.data()!.password_changed_at)) {
+    await database().collection('sessions').doc(id).delete();
+    return null;
+  }
   if (now-lastSeenAt >= 60_000) await database().collection('sessions').doc(id).update({last_seen_at:new Date(now).toISOString()});
   return {...user.data() as UserRow,session_id:id,actor_admin_id:saved.actor_admin_id};
 }
@@ -476,19 +479,41 @@ async function aiReceipt(state: AuthState, input: JsonObject): Promise<Response>
   return response(parseReceiptResponse(raw) as unknown as JsonObject);
 }
 
-async function checkAdminBootstrap(req:Request):Promise<Response> {
-  const configured=configuredAdminBootstrapPassword();
-  if (!configured) throw new ApiError(404,'요청한 기능을 찾을 수 없어요.');
-  const supplied=req.headers.get('x-admin-bootstrap-secret') ?? '';
+async function setupAdministrator(input:JsonObject):Promise<Response> {
+  const configured=process.env.ADMIN_SETUP_TOKEN;
+  if (!configured || configured.length<32 || configured.length>256) throw new ApiError(503,'관리자 설정 코드가 아직 준비되지 않았어요.','admin_setup_unavailable');
+  const supplied=string(input.setupToken,256);
   const left=Buffer.from(supplied),right=Buffer.from(configured);
-  if (left.length!==right.length || !timingSafeEqual(left,right)) throw new ApiError(403,'관리자 설정을 확인할 수 없어요.','bootstrap_secret_mismatch');
-  try {return response({status:await ensureAdminPassword(configured)});}
-  catch(error) {
-    if (error instanceof Error && error.message.includes('관리자 계정과 연결되지')) throw new ApiError(409,'admin 아이디가 일반 회원 계정으로 사용 중이에요.','admin_username_conflict');
-    if (error instanceof Error && error.message.includes('색인이 손상')) throw new ApiError(409,'admin 계정 색인을 확인해야 해요.','admin_index_conflict');
-    if (error instanceof Error && error.message.includes('비밀번호는')) throw new ApiError(400,'관리자 비밀번호 규칙을 확인해 주세요.','bootstrap_password_rule');
-    throw new ApiError(503,'관리자 계정 설정이 완료되지 않았어요. 서버 로그를 확인해 주세요.','bootstrap_failed');
-  }
+  if (left.length!==right.length || !timingSafeEqual(left,right)) throw new ApiError(403,'관리자 설정 코드가 올바르지 않아요.','admin_setup_invalid_token');
+  const password=string(input.password,128);
+  if (!passwordRule(password)) throw new ApiError(400,'비밀번호는 8자 이상이며 영문 대문자·소문자·특수문자를 포함해야 해요.','invalid_password');
+  const db=database(),lookup=usernameLookup('admin'),now=new Date().toISOString();
+  const markerRef=db.collection('system').doc('admin-setup-v1');
+  const indexRef=db.collection('usernames').doc(lookup);
+  const passwordHash=await hashPassword(password);
+  await db.runTransaction(async transaction=>{
+    const marker=await transaction.get(markerRef);
+    if (marker.exists) throw new ApiError(409,'관리자 계정 설정이 이미 완료됐어요.','admin_setup_complete');
+    const index=await transaction.get(indexRef);
+    const existingId=index.data()?.user_id as string|undefined;
+    if (index.exists && !existingId) throw new ApiError(409,'기존 admin 계정을 확인해야 해요.','admin_index_conflict');
+    if (existingId) {
+      const userRef=db.collection('users').doc(existingId);
+      const user=await transaction.get(userRef);
+      if (!user.exists || user.data()?.role!=='ADMIN') throw new ApiError(409,'admin 아이디가 일반 회원 계정으로 사용 중이에요.','admin_username_conflict');
+      transaction.update(userRef,{password_hash:passwordHash,password_changed_at:now});
+    } else {
+      const id=randomUUID();
+      transaction.create(db.collection('users').doc(id),{
+        id,name:'관리자',username_lookup:lookup,username_cipher:encryptField('admin'),
+        birth_date_cipher:encryptField('2000-01-01'),phone_cipher:encryptField('01000000001'),
+        password_hash:passwordHash,role:'ADMIN',created_at:now,last_login_at:null,password_changed_at:now,
+      } satisfies UserRow & {username_lookup:string});
+      transaction.create(indexRef,{user_id:id});
+    }
+    transaction.create(markerRef,{completed_at:now});
+  });
+  return response({ok:true});
 }
 
 export async function handleRequest(req: Request): Promise<Response> {
@@ -499,9 +524,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     // Missing secrets fail closed; the app never falls back to shared browser data.
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY,'base64').length!==32) throw new ApiError(503,'Firebase 연결을 준비하고 있어요.','setup_required');
     const action = new URL(req.url).searchParams.get('action');
-    if (req.method === 'POST' && action === 'admin-bootstrap-check') return await checkAdminBootstrap(req);
-    try {await ensureAdminFromEnvironment();}
-    catch {console.error('Administrator bootstrap failed; normal requests remain available.');}
+    if (req.method === 'POST' && action === 'admin-setup') return await setupAdministrator(await body(req));
     if (req.method === 'POST' && action === 'register') return await register(req,await body(req));
     if (req.method === 'POST' && action === 'login') return await login(req,await body(req));
     if (req.method === 'POST' && action === 'logout') return await logout(req);

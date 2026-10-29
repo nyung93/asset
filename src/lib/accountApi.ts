@@ -30,6 +30,7 @@ async function call<T>(action:string, method:'GET'|'POST'='GET', input?:object, 
 export const accountApi={
   status:()=>call<AccountSession>('status'),
   register:(input:{name:string;birthDate:string;phone:string;username:string;password:string})=>call<AccountSession>('register','POST',input),
+  setupAdmin:(input:{setupToken:string;password:string})=>call<{ok:true}>('admin-setup','POST',input),
   login:(input:{username:string;password:string;remember:boolean})=>call<AccountSession>('login','POST',input),
   logout:()=>call<{ok:boolean}>('logout','POST'),
   data:(userId:string)=>call<{data:AppData|null;version:number}>('data','GET',undefined,{userId}),

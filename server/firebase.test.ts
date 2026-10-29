@@ -228,14 +228,7 @@ test('admin bootstrap creates or rotates only an administrator and revokes old s
   const db=new MemoryFirestore();
   setDatabaseForTests(db as unknown as Firestore);
   try {
-    process.env.ADMIN_BOOTSTRAP_PASSWORD='  "Initial!123"  ';
-    const check=(secret:string)=>new Request(`${origin}/api/index?action=admin-bootstrap-check`,{method:'POST',headers:{origin,'x-admin-bootstrap-secret':secret}});
-    assert.equal(await handleRequest(check('wrong')).then(res=>res.status),403);
-    assert.deepEqual(await handleRequest(check('Initial!123')).then(res=>res.json()),{status:'created'});
-    assert.deepEqual(await handleRequest(check('Initial!123')).then(res=>res.json()),{status:'unchanged'});
-    assert.equal(await handleRequest(request('status')).then(res=>res.status),401);
-    delete process.env.ADMIN_BOOTSTRAP_PASSWORD;
-    assert.equal(await handleRequest(check('Initial!123')).then(res=>res.status),404);
+    assert.equal(await ensureAdminPassword('Initial!123'),'created');
     assert.equal(await ensureAdminPassword('Initial!123'),'unchanged');
     const lookup=usernameLookup('admin');
     const id=db.rows.get(`usernames/${lookup}`)?.user_id as string;
@@ -250,4 +243,29 @@ test('admin bootstrap creates or rotates only an administrator and revokes old s
     assert.equal(await handleRequest(request('login','POST',{username:'admin',password:'Initial!123'})).then(res=>res.status),401);
     assert.equal(await handleRequest(request('login','POST',{username:'admin',password:'Rotated!456'})).then(res=>res.status),200);
   } finally {delete process.env.ADMIN_BOOTSTRAP_PASSWORD;setDatabaseForTests(undefined);}
+});
+
+test('one-time admin setup requires a server secret and cannot be reused',async()=>{
+  process.env.NODE_ENV='test';
+  process.env.FIREBASE_PROJECT_ID='test-project';
+  process.env.FIREBASE_CLIENT_EMAIL='test@example.com';
+  process.env.FIREBASE_PRIVATE_KEY='test-key';
+  process.env.FIELD_ENCRYPTION_KEY=randomBytes(32).toString('base64');
+  const db=new MemoryFirestore();
+  setDatabaseForTests(db as unknown as Firestore);
+  const token=randomBytes(32).toString('hex');
+  const setup=(setupToken:string,password:string)=>request('admin-setup','POST',{setupToken,password});
+  try {
+    assert.equal(await handleRequest(setup(token,'Setup!987')).then(res=>res.status),503);
+    process.env.ADMIN_SETUP_TOKEN=token;
+    assert.equal(await handleRequest(setup('wrong','Setup!987')).then(res=>res.status),403);
+    assert.equal(await handleRequest(setup(token,'weak')).then(res=>res.status),400);
+    assert.deepEqual(await handleRequest(setup(token,'Setup!987')).then(res=>res.json()),{ok:true});
+    assert.equal(await handleRequest(setup(token,'Another!123')).then(res=>res.status),409);
+    const lookup=usernameLookup('admin');
+    const id=db.rows.get(`usernames/${lookup}`)?.user_id as string;
+    assert.equal(db.rows.get(`users/${id}`)?.role,'ADMIN');
+    assert.equal(await verifyPassword('Setup!987',String(db.rows.get(`users/${id}`)?.password_hash)),true);
+    assert.equal(await handleRequest(request('login','POST',{username:'admin',password:'Setup!987'})).then(res=>res.status),200);
+  } finally {delete process.env.ADMIN_SETUP_TOKEN;setDatabaseForTests(undefined);}
 });

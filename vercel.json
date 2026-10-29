@@ -3,6 +3,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm ci",
+  "rewrites": [{"source":"/admin/setup","destination":"/index.html"}],
+  "headers": [{"source":"/admin/setup","headers":[{"key":"X-Robots-Tag","value":"noindex, nofollow"}]}],
   "functions": {
     "api/index.mjs": {"maxDuration": 60}
   }

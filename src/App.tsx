@@ -16,6 +16,7 @@ import {initialData,migrateAppData} from './store';
 import AuthShell from './components/AuthShell';
 import MyPage from './components/MyPage';
 import AdminPage from './components/AdminPage';
+import AdminSetupPage from './components/AdminSetupPage';
 const tabs = [
   {name: '홈', sub: '마이룸', icon: Home},
   {name: '캘린더', sub: '가계부', icon: CalendarDays},
@@ -196,6 +197,7 @@ function AccountApp() {
 }
 
 export default function App() {
+  if (window.location.pathname.replace(/\/$/,'') === '/admin/setup') return <AdminSetupPage/>;
   // Only the local Playwright dev server can enable the legacy fixture path.
   if(import.meta.env.DEV && import.meta.env.VITE_E2E_AUTH_BYPASS==='1') return <GameShell/>;
   return <AccountApp/>;

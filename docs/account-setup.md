@@ -40,12 +40,15 @@
    기존 사용자에게 관리자 권한을 부여할 때만
    `npm run admin:grant -- <아이디>`를 사용합니다.
 
-   로컬에 서버 비밀값이 없고 Vercel Production에만 있다면, Vercel 환경 변수에
-   `ADMIN_BOOTSTRAP_PASSWORD`를 **Secret / Production**으로 일시적으로 추가하고
-   Production을 재배포합니다. 새 서버가 처음 요청을 받으면 `admin` 계정을 만들거나
-   기존 관리자 비밀번호를 변경하며 이전 로그인 세션을 종료합니다. 값은 소스 코드나
-   `VITE_` 변수에 넣지 마세요. 관리자 로그인 확인 후 이 환경 변수를 삭제하고
-   다시 재배포하세요. 같은 값은 Firestore 표식으로 중복 적용되지 않습니다.
+   운영 서버에서 직접 관리자 계정을 만들려면 `openssl rand -hex 24`로 별도의
+   일회용 설정 코드를 만들고 Vercel 환경 변수 `ADMIN_SETUP_TOKEN`에
+   **Secret / Production**으로 저장합니다. `ADMIN_BOOTSTRAP_PASSWORD`를 Production에
+   등록했다면 삭제합니다. Production을 재배포한 뒤
+   `https://asset-lilac.vercel.app/admin/setup`에서 설정 코드와 원하는 관리자
+   비밀번호를 입력합니다. 아이디는 `admin`으로 고정됩니다. 성공하면 설정 화면은
+   Firestore 표식에 의해 다시 사용할 수 없습니다. 로그인 확인 후
+   `ADMIN_SETUP_TOKEN`도 Vercel에서 삭제하고 재배포하세요. 설정 코드는 URL,
+   소스 코드, 채팅에 넣지 마세요.
 
 `FIELD_ENCRYPTION_KEY`는 안전한 비밀 저장소에 별도 백업해야 합니다. 바꾸거나
 잃어버리면 기존 아이디·생년월일·휴대폰 번호·가계부를 복호화할 수 없습니다.
