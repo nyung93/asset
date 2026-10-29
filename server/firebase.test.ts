@@ -4,7 +4,8 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import type {Firestore} from 'firebase-admin/firestore';
 import {setDatabaseForTests} from './db';
 import {handleRequest} from './handler';
-import {encryptField,hashPassword,tokenHash,usernameLookup} from './security';
+import {ensureAdminPassword} from './adminBootstrap';
+import {encryptField,hashPassword,tokenHash,usernameLookup,verifyPassword} from './security';
 
 type Saved = Record<string,unknown>;
 class MemoryFirestore {
@@ -18,12 +19,21 @@ class MemoryFirestore {
           key,
           async get() {const data=rows.get(key);return {exists:!!data,data:()=>data ? structuredClone(data) : undefined};},
           async create(value:Saved) {if(rows.has(key)) throw Object.assign(new Error('Already exists'),{code:6});rows.set(key,structuredClone(value));},
+          async set(value:Saved) {rows.set(key,structuredClone(value));},
           async update(value:Saved) {const prior=rows.get(key);if(!prior) throw new Error('Missing document');rows.set(key,{...prior,...structuredClone(value)});},
           async delete() {rows.delete(key);},
         };
       },
       async get() {return {docs:[...rows].filter(([key])=>key.startsWith(`${name}/`)).map(([key,value])=>({id:key.slice(name.length+1),data:()=>structuredClone(value)}))};},
+      where(field:string,operator:string,value:unknown) {
+        assert.equal(operator,'==');
+        return {async get() {return {docs:[...rows].filter(([key,row])=>key.startsWith(`${name}/`) && row[field]===value).map(([key])=>({ref:{key}}))};}};
+      },
     };
+  }
+  batch() {
+    const deletes:string[]=[];
+    return {delete:(ref:{key:string})=>{deletes.push(ref.key);},commit:async()=>{deletes.forEach(key=>this.rows.delete(key));}};
   }
   async runTransaction<T>(run:(transaction:{get:(ref:ReturnType<ReturnType<MemoryFirestore['collection']>['doc']>)=>ReturnType<ReturnType<ReturnType<MemoryFirestore['collection']>['doc']>['get']>;
     create:(ref:{key:string},value:Saved)=>void;set:(ref:{key:string},value:Saved)=>void;update:(ref:{key:string},value:Saved)=>void;delete:(ref:{key:string})=>void})=>Promise<T>):Promise<T> {
@@ -207,4 +217,32 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     if(oldGeminiKey===undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=oldGeminiKey;
     setDatabaseForTests(undefined);
   }
+});
+
+test('admin bootstrap creates or rotates only an administrator and revokes old sessions',async()=>{
+  process.env.NODE_ENV='test';
+  process.env.FIREBASE_PROJECT_ID='test-project';
+  process.env.FIREBASE_CLIENT_EMAIL='test@example.com';
+  process.env.FIREBASE_PRIVATE_KEY='test-key';
+  process.env.FIELD_ENCRYPTION_KEY=randomBytes(32).toString('base64');
+  const db=new MemoryFirestore();
+  setDatabaseForTests(db as unknown as Firestore);
+  try {
+    process.env.ADMIN_BOOTSTRAP_PASSWORD='Initial!123';
+    assert.equal(await handleRequest(request('status')).then(res=>res.status),401);
+    delete process.env.ADMIN_BOOTSTRAP_PASSWORD;
+    assert.equal(await ensureAdminPassword('Initial!123'),'unchanged');
+    const lookup=usernameLookup('admin');
+    const id=db.rows.get(`usernames/${lookup}`)?.user_id as string;
+    assert.equal(db.rows.get(`users/${id}`)?.role,'ADMIN');
+    assert.equal(await verifyPassword('Initial!123',String(db.rows.get(`users/${id}`)?.password_hash)),true);
+    const login=await handleRequest(request('login','POST',{username:'admin',password:'Initial!123'}));
+    assert.equal(login.status,200);
+    const oldCookie=sessionCookie(login);
+    assert.equal(await ensureAdminPassword('Rotated!456'),'updated');
+    assert.equal(await verifyPassword('Rotated!456',String(db.rows.get(`users/${id}`)?.password_hash)),true);
+    assert.equal(await handleRequest(request('status','GET',undefined,oldCookie)).then(res=>res.status),401);
+    assert.equal(await handleRequest(request('login','POST',{username:'admin',password:'Initial!123'})).then(res=>res.status),401);
+    assert.equal(await handleRequest(request('login','POST',{username:'admin',password:'Rotated!456'})).then(res=>res.status),200);
+  } finally {delete process.env.ADMIN_BOOTSTRAP_PASSWORD;setDatabaseForTests(undefined);}
 });

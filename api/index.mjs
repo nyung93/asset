@@ -1,5 +1,5 @@
 // server/handler.ts
-import { randomUUID } from "node:crypto";
+import { randomUUID as randomUUID2 } from "node:crypto";
 
 // server/db.ts
 import { applicationDefault, cert, getApps, initializeApp } from "firebase-admin/app";
@@ -370,6 +370,79 @@ async function financeQuote(req) {
   return new Response(JSON.stringify({ error: "\uC2DC\uC138\uB97C \uAC00\uC838\uC624\uC9C0 \uBABB\uD588\uC5B4\uC694." }), { status: 502, headers: { ...headers, "Cache-Control": "no-store" } });
 }
 
+// server/adminBootstrap.ts
+import { createHmac as createHmac2, randomUUID } from "node:crypto";
+var appliedFingerprint;
+async function ensureAdminPassword(password) {
+  if (!passwordRule(password)) throw new Error("\uAD00\uB9AC\uC790 \uBE44\uBC00\uBC88\uD638\uB294 8\uC790 \uC774\uC0C1\uC774\uBA70 \uC601\uBB38 \uB300\uBB38\uC790\xB7\uC18C\uBB38\uC790\xB7\uD2B9\uC218\uBB38\uC790\uB97C \uD3EC\uD568\uD574\uC57C \uD574\uC694.");
+  const key = Buffer.from(process.env.FIELD_ENCRYPTION_KEY ?? "", "base64");
+  if (key.length !== 32) throw new Error("FIELD_ENCRYPTION_KEY must contain 32 random bytes in base64");
+  const fingerprint = createHmac2("sha256", key).update("admin-bootstrap-v1").update(password).digest("hex");
+  if (appliedFingerprint === fingerprint) return "unchanged";
+  const db = database();
+  const markerRef = db.collection("system").doc("admin-bootstrap-v1");
+  if ((await markerRef.get()).data()?.fingerprint === fingerprint) {
+    appliedFingerprint = fingerprint;
+    return "unchanged";
+  }
+  const passwordHash = await hashPassword(password);
+  const lookup = usernameLookup(normalizeUsername("admin"));
+  const indexRef = db.collection("usernames").doc(lookup);
+  const result = await db.runTransaction(async (transaction) => {
+    const marker = await transaction.get(markerRef);
+    if (marker.data()?.fingerprint === fingerprint) return { id: "", status: "unchanged" };
+    const index = await transaction.get(indexRef);
+    const existingId = index.data()?.user_id;
+    if (index.exists && !existingId) throw new Error("admin \uC544\uC774\uB514 \uC0C9\uC778\uC774 \uC190\uC0C1\uB3FC \uC788\uC5B4\uC694.");
+    let id = existingId;
+    let status2 = "updated";
+    if (id) {
+      const userRef = db.collection("users").doc(id);
+      const user = await transaction.get(userRef);
+      if (!user.exists || user.data()?.role !== "ADMIN") throw new Error("admin \uC544\uC774\uB514\uAC00 \uAD00\uB9AC\uC790 \uACC4\uC815\uACFC \uC5F0\uACB0\uB418\uC9C0 \uC54A\uC558\uC5B4\uC694.");
+      transaction.update(userRef, { password_hash: passwordHash });
+    } else {
+      id = randomUUID();
+      const now = (/* @__PURE__ */ new Date()).toISOString();
+      transaction.create(db.collection("users").doc(id), {
+        id,
+        name: "\uAD00\uB9AC\uC790",
+        username_lookup: lookup,
+        username_cipher: encryptField("admin"),
+        birth_date_cipher: encryptField("2000-01-01"),
+        phone_cipher: encryptField("01000000001"),
+        password_hash: passwordHash,
+        role: "ADMIN",
+        created_at: now,
+        last_login_at: null
+      });
+      transaction.create(indexRef, { user_id: id });
+      status2 = "created";
+    }
+    return { id, status: status2 };
+  });
+  if (result.status === "unchanged") return "unchanged";
+  for (const [collection, field] of [
+    ["sessions", "user_id"],
+    ["sessions", "actor_admin_id"],
+    ["remember_tokens", "user_id"]
+  ]) {
+    const documents = await db.collection(collection).where(field, "==", result.id).get();
+    for (let offset = 0; offset < documents.docs.length; offset += 400) {
+      const batch = db.batch();
+      for (const document2 of documents.docs.slice(offset, offset + 400)) batch.delete(document2.ref);
+      await batch.commit();
+    }
+  }
+  await markerRef.set({ fingerprint, applied_at: (/* @__PURE__ */ new Date()).toISOString() });
+  appliedFingerprint = fingerprint;
+  return result.status;
+}
+async function ensureAdminFromEnvironment() {
+  const password = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  if (password) await ensureAdminPassword(password);
+}
+
 // src/lib/progression.ts
 var HOUSE_STAGES = [
   { stage: 1, name: "\uC544\uB291\uD55C \uBC18\uC9C0\uD558 \uC6D0\uB8F8", minXp: 0, nextXp: 500, firstLevel: 1, levelCount: 5 },
@@ -603,7 +676,7 @@ async function register(req, input) {
   const password = string(input.password, 128);
   if (name.length < 2 || !validBirthDate(birthDate)) throw new ApiError(400, "\uC774\uB984\uACFC \uC0DD\uB144\uC6D4\uC77C\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
   if (!passwordRule(password)) throw new ApiError(400, "\uBE44\uBC00\uBC88\uD638\uB294 8\uC790 \uC774\uC0C1\uC774\uBA70 \uC601\uBB38 \uB300\uBB38\uC790\xB7\uC18C\uBB38\uC790\xB7\uD2B9\uC218\uBB38\uC790\uB97C \uD3EC\uD568\uD574\uC57C \uD574\uC694.");
-  const id = randomUUID();
+  const id = randomUUID2();
   const hashed = await hashPassword(password);
   const row = {
     id,
@@ -761,7 +834,7 @@ async function saveData(state, input) {
   return response({ version: nextVersion });
 }
 async function audit(actor, target, action) {
-  await database().collection("admin_audit").doc(randomUUID()).create({ actor_admin_id: actor, target_user_id: target, action, created_at: (/* @__PURE__ */ new Date()).toISOString() });
+  await database().collection("admin_audit").doc(randomUUID2()).create({ actor_admin_id: actor, target_user_id: target, action, created_at: (/* @__PURE__ */ new Date()).toISOString() });
 }
 async function dashboard() {
   const [users, data] = await Promise.all([database().collection("users").get(), database().collection("app_data").get()]);
@@ -828,7 +901,7 @@ async function resetMemberXp(state, input) {
   if (!targetId) throw new ApiError(400, "\uD68C\uC6D0\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
   const userRef = database().collection("users").doc(targetId);
   const dataRef = database().collection("app_data").doc(targetId);
-  const auditRef = database().collection("admin_audit").doc(randomUUID());
+  const auditRef = database().collection("admin_audit").doc(randomUUID2());
   await database().runTransaction(async (transaction) => {
     const [userSnapshot, dataSnapshot] = await Promise.all([transaction.get(userRef), transaction.get(dataRef)]);
     const user = userSnapshot.data();
@@ -914,6 +987,11 @@ async function handleRequest(req) {
     if (req.method === "POST") sameOrigin(req);
     if (req.method === "GET" && new URL(req.url).searchParams.get("action") === "finance-quote") return await financeQuote(req);
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY, "base64").length !== 32) throw new ApiError(503, "Firebase \uC5F0\uACB0\uC744 \uC900\uBE44\uD558\uACE0 \uC788\uC5B4\uC694.", "setup_required");
+    try {
+      await ensureAdminFromEnvironment();
+    } catch {
+      console.error("Administrator bootstrap failed; normal requests remain available.");
+    }
     const action = new URL(req.url).searchParams.get("action");
     if (req.method === "POST" && action === "register") return await register(req, await body(req));
     if (req.method === "POST" && action === "login") return await login(req, await body(req));

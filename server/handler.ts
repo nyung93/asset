@@ -5,6 +5,7 @@ import {GeminiRequestError, generateGemini} from './gemini';
 import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
 import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
 import {financeQuote} from './financeQuote';
+import {ensureAdminFromEnvironment} from './adminBootstrap';
 import {characterAtXp, progression} from '../src/lib/progression';
 import type {CharacterState} from '../src/types';
 
@@ -482,6 +483,8 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (req.method === 'GET' && new URL(req.url).searchParams.get('action') === 'finance-quote') return await financeQuote(req);
     // Missing secrets fail closed; the app never falls back to shared browser data.
     if (!firebaseConfigured() || !process.env.FIELD_ENCRYPTION_KEY || Buffer.from(process.env.FIELD_ENCRYPTION_KEY,'base64').length!==32) throw new ApiError(503,'Firebase 연결을 준비하고 있어요.','setup_required');
+    try {await ensureAdminFromEnvironment();}
+    catch {console.error('Administrator bootstrap failed; normal requests remain available.');}
     const action = new URL(req.url).searchParams.get('action');
     if (req.method === 'POST' && action === 'register') return await register(req,await body(req));
     if (req.method === 'POST' && action === 'login') return await login(req,await body(req));

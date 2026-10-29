@@ -40,6 +40,13 @@
    기존 사용자에게 관리자 권한을 부여할 때만
    `npm run admin:grant -- <아이디>`를 사용합니다.
 
+   로컬에 서버 비밀값이 없고 Vercel Production에만 있다면, Vercel 환경 변수에
+   `ADMIN_BOOTSTRAP_PASSWORD`를 **Secret / Production**으로 일시적으로 추가하고
+   Production을 재배포합니다. 새 서버가 처음 요청을 받으면 `admin` 계정을 만들거나
+   기존 관리자 비밀번호를 변경하며 이전 로그인 세션을 종료합니다. 값은 소스 코드나
+   `VITE_` 변수에 넣지 마세요. 관리자 로그인 확인 후 이 환경 변수를 삭제하고
+   다시 재배포하세요. 같은 값은 Firestore 표식으로 중복 적용되지 않습니다.
+
 `FIELD_ENCRYPTION_KEY`는 안전한 비밀 저장소에 별도 백업해야 합니다. 바꾸거나
 잃어버리면 기존 아이디·생년월일·휴대폰 번호·가계부를 복호화할 수 없습니다.
 기존 PostgreSQL 계정은 Firestore로 자동 이전되지 않습니다. 이전 DB에 회원이
