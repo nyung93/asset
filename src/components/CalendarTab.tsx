@@ -7,6 +7,7 @@ import { signedAmount, summarize, transactionStyle, transactionTypes } from '../
 import Dialog from './Dialog';
 import ReceiptImportSheet from './ReceiptImportSheet';
 import { resolveReceiptCode, type ParseResult } from '../utils/receiptParser';
+import {codeKind} from '../lib/categoryCodes';
 import CharacterAvatar from './CharacterAvatar';
 import { getCharacterMood } from '../lib/characterMood';
 
@@ -40,7 +41,6 @@ function TransactionList({transactions, codes, onDelete}: {
           <div className="flex flex-wrap items-center gap-2">
             <span className={`rounded px-2 py-1 text-xs font-semibold ${style.background} ${style.text}`}>{style.label}</span>
             <span className="text-xs font-semibold">{category}</span>
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">{tx.codeId}</span>
           </div>
           <p className="mt-2 break-words text-sm text-slate-500">{tx.memo || '메모 없음'}</p>
         </div>
@@ -55,9 +55,11 @@ function TransactionForm({date, onClose, onSaved}: {
   date: string; onClose: () => void; onSaved: (date: string, rewarded: boolean) => void;
 }) {
   const codes = useAppStore(s => s.budgetCodes);
+  const expenseCodes = codes.filter(code => codeKind(code) === 'EXPENSE');
   const save = useAppStore(s => s.saveTransactionWithDailyReward);
   const [type, setType] = useState<Transaction['type']>('EXPENSE');
-  const [codeId, setCodeId] = useState(codes[0]?.codeId ?? '');
+  const availableCodes = codes.filter(code => codeKind(code) === type);
+  const [codeId, setCodeId] = useState(() => codes.find(code => codeKind(code) === 'EXPENSE')?.codeId ?? '');
   const [error, setError] = useState('');
   const [txDate, setTxDate] = useState(date);
   const [amount, setAmount] = useState('');
@@ -71,13 +73,13 @@ function TransactionForm({date, onClose, onSaved}: {
     if (data.txDate) setTxDate(data.txDate);
     if (data.amount !== undefined) setAmount(String(data.amount));
     if (data.memo) setMemo(data.memo);
-    const missing = [!data.txDate && '날짜', !data.memo && '사용처', !mappedCode && '예산 코드'].filter(Boolean);
-    setImportNotice(missing.length ? `확인된 내용을 채웠어요. ${missing.join(' · ')}는 직접 확인해 주세요. 읽지 못한 날짜와 메모는 기존 입력을 유지했어요.` : '결제 내용을 채웠어요. 날짜·금액·사용처·예산 코드를 확인한 후 저장해 주세요.');
+    const missing = [!data.txDate && '날짜', !data.memo && '사용처', !mappedCode && '카테고리'].filter(Boolean);
+    setImportNotice(missing.length ? `확인된 내용을 채웠어요. ${missing.join(' · ')}는 직접 확인해 주세요. 읽지 못한 날짜와 메모는 기존 입력을 유지했어요.` : '결제 내용을 채웠어요. 날짜·금액·사용처·카테고리를 확인한 후 저장해 주세요.');
     setError('');setReceiptOpen(false);
   }
   function changeType(next: Transaction['type']) {
     setType(next);
-    setCodeId(next === 'EXPENSE' ? codes[0]?.codeId ?? '' : next);
+    setCodeId(next === 'EXPENSE' ? expenseCodes[0]?.codeId ?? '' : next);
     setError('');
   }
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -108,13 +110,13 @@ function TransactionForm({date, onClose, onSaved}: {
       <select className="standalone-input" id="tx-type" value={type} onChange={event => changeType(event.target.value as Transaction['type'])}>
         {transactionTypes.map(value => <option key={value} value={value}>{transactionStyle[value].label}</option>)}
       </select>
-      <label className="field-label" htmlFor="tx-code">예산 코드</label>
+      <label className="field-label" htmlFor="tx-code">카테고리</label>
       <select className="standalone-input" id="tx-code" required value={codeId} onChange={event => setCodeId(event.target.value)}>
-        <option value="" disabled>예산 코드를 선택해 주세요</option>
-        {type !== 'EXPENSE' && <option value={type}>{type} · 기본 {transactionStyle[type].label}</option>}
-        {codes.map(code => <option key={code.codeId} value={code.codeId}>{code.codeId} · {code.categoryName}</option>)}
+        <option value="" disabled>카테고리를 선택해 주세요</option>
+        {type !== 'EXPENSE' && <option value={type}>기본 {transactionStyle[type].label}</option>}
+        {availableCodes.map(code => <option key={code.codeId} value={code.codeId}>{code.categoryName}</option>)}
       </select>
-      {type === 'EXPENSE' && !codes.length && <p className="mt-2 text-xs text-rose-500">목표 & 설정에서 예산 코드를 먼저 추가해 주세요.</p>}
+      {type === 'EXPENSE' && !expenseCodes.length && <p className="mt-2 text-xs text-rose-500">목표 & 설정에서 지출 카테고리를 먼저 추가해 주세요.</p>}
       <label className="field-label" htmlFor="tx-amount">금액 (원)</label>
       <input className="standalone-input" id="tx-amount" name="amount" type="number" inputMode="numeric" required min="1" max={Number.MAX_SAFE_INTEGER} step="1" placeholder="0" value={amount} onChange={event => setAmount(event.target.value)}/>
       <label className="field-label" htmlFor="tx-memo">메모 <span className="font-normal text-slate-400">선택</span></label>
@@ -122,7 +124,7 @@ function TransactionForm({date, onClose, onSaved}: {
       <p role="alert" className="mt-3 text-sm text-rose-500">{error}</p>
       <div className="mt-5 flex gap-2">
         <button type="button" className="button-secondary flex-1" onClick={onClose}>취소</button>
-        <button type="submit" disabled={type === 'EXPENSE' && !codes.length} className="button-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50">기록 저장</button>
+        <button type="submit" disabled={type === 'EXPENSE' && !expenseCodes.length} className="button-primary flex-1 disabled:cursor-not-allowed disabled:opacity-50">기록 저장</button>
       </div>
     </form>
     {receiptOpen && <ReceiptImportSheet onClose={() => setReceiptOpen(false)} onApply={applyReceipt}/>}

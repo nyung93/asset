@@ -180,7 +180,7 @@ var ADVISOR_SYSTEM_PROMPT = `\uB108\uB294 2030 \uC5EC\uC131\uB4E4\uC5D0\uAC8C \u
 \uAC01 \uBB38\uC7A5\uC740 \uD55C \uC904\uC5D0 \uD558\uB098\uC529 \uC815\uD655\uD788 \uC138 \uC904\uB85C \uC791\uC131\uD574. \uD22C\uC790 \uAE30\uB85D\uC774 \uC5C6\uAC70\uB098 \uC2DC\uC138\uB97C \uD655\uC778\uD558\uC9C0 \uBABB\uD588\uC73C\uBA74 \uC218\uC775\uB960\uC744 \uCD94\uCE21\uD558\uC9C0 \uB9D0\uACE0, \uAE30\uB85D\uC744 \uC0B4\uD3B4\uBCF4\uC790\uACE0 \uB2E4\uC815\uD558\uAC8C \uB9D0\uD574.`;
 var money = (value) => `${new Intl.NumberFormat("ko-KR").format(value)}\uC6D0`;
 function advisorDataPrompt(summary) {
-  const category = summary.topCategory ? `${summary.topCategory.categoryName}(${summary.topCategory.codeId}) ${money(summary.topCategory.amount)}` : "\uC9C0\uCD9C \uAE30\uB85D \uC5C6\uC74C";
+  const category = summary.topCategory ? `${summary.topCategory.categoryName} ${money(summary.topCategory.amount)}` : "\uC9C0\uCD9C \uAE30\uB85D \uC5C6\uC74C";
   const returns = summary.investmentReturns.length ? summary.investmentReturns.map((item) => `${item.currency} ${item.rate > 0 ? "+" : ""}${item.rate.toFixed(2)}%`).join(" \xB7 ") : "\uC2DC\uC138 \uD655\uC778\uB41C \uD22C\uC790 \uAE30\uB85D \uC5C6\uC74C";
   return `\uB2E4\uC74C\uC740 ${summary.yearMonth}\uC758 \uC9D1\uACC4 \uB370\uC774\uD130\uC57C. \uC774 \uC22B\uC790\uB9CC\uC73C\uB85C \uC138 \uBB38\uC7A5\uC744 \uC791\uC131\uD574\uC918.
 \uC608\uC0B0: ${money(summary.totalBudget)}, \uC9C0\uCD9C: ${money(summary.totalExpenses)}, \uCD5C\uB300 \uC9C0\uCD9C \uCE74\uD14C\uACE0\uB9AC: ${category}, \uD22C\uC790 \uC218\uC775\uB960: ${returns}`;
@@ -368,6 +368,36 @@ async function financeQuote(req) {
     }
   }
   return new Response(JSON.stringify({ error: "\uC2DC\uC138\uB97C \uAC00\uC838\uC624\uC9C0 \uBABB\uD588\uC5B4\uC694." }), { status: 502, headers: { ...headers, "Cache-Control": "no-store" } });
+}
+
+// src/lib/progression.ts
+var HOUSE_STAGES = [
+  { stage: 1, name: "\uC544\uB291\uD55C \uBC18\uC9C0\uD558 \uC6D0\uB8F8", minXp: 0, nextXp: 500, firstLevel: 1, levelCount: 5 },
+  { stage: 2, name: "\uCC44\uAD11 \uC88B\uC740 \uC624\uD53C\uC2A4\uD154", minXp: 500, nextXp: 2e3, firstLevel: 6, levelCount: 10 },
+  { stage: 3, name: "\uC5ED\uC138\uAD8C \uD22C\uB8F8 \uC544\uD30C\uD2B8", minXp: 2e3, nextXp: 5e3, firstLevel: 16, levelCount: 15 },
+  { stage: 4, name: "\uD55C\uAC15\uBDF0 \uD39C\uD2B8\uD558\uC6B0\uC2A4", minXp: 5e3, nextXp: 1e4, firstLevel: 31, levelCount: 19 },
+  { stage: 5, name: "\uC815\uC6D0\uC774 \uC788\uB294 \uB300\uC800\uD0DD", minXp: 1e4, nextXp: null, firstLevel: 50, levelCount: null }
+];
+function progression(totalXp) {
+  if (!Number.isSafeInteger(totalXp) || totalXp < 0) throw new Error("\uB204\uC801 XP\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4.");
+  const house = [...HOUSE_STAGES].reverse().find((stage) => totalXp >= stage.minXp);
+  const offset = house.nextXp === null ? Math.floor((totalXp - house.minXp) / 500) : Math.floor((totalXp - house.minXp) * house.levelCount / (house.nextXp - house.minXp));
+  const levelStart = house.nextXp === null ? house.minXp + offset * 500 : house.minXp + Math.ceil(offset * (house.nextXp - house.minXp) / house.levelCount);
+  const nextLevelXp = house.nextXp === null ? levelStart + 500 : house.minXp + Math.ceil((offset + 1) * (house.nextXp - house.minXp) / house.levelCount);
+  return {
+    level: house.firstLevel + offset,
+    currentXp: totalXp - levelStart,
+    houseStage: house.stage,
+    house,
+    nextLevelXp,
+    levelSpan: nextLevelXp - levelStart,
+    houseProgress: house.nextXp === null ? 100 : (totalXp - house.minXp) / (house.nextXp - house.minXp) * 100,
+    remainingHouseXp: house.nextXp === null ? 0 : house.nextXp - totalXp
+  };
+}
+function characterAtXp(character, totalXp) {
+  const { level, currentXp, houseStage } = progression(totalXp);
+  return { ...character, totalXp, level, currentXp, houseStage };
 }
 
 // server/handler.ts
@@ -765,19 +795,54 @@ async function members(req) {
   } catch {
   }
   const normalized = search.toLocaleLowerCase("ko-KR");
-  const users = await database().collection("users").get();
+  const [users, data] = await Promise.all([database().collection("users").get(), database().collection("app_data").get()]);
+  const scores = new Map(data.docs.map((doc) => [doc.id, Number(doc.data().total_xp) || 0]));
   const filtered = users.docs.map((doc) => doc.data()).filter((user) => !search || user.name.toLocaleLowerCase("ko-KR").includes(normalized) || user.username_lookup === lookup).sort((left, right) => right.created_at.localeCompare(left.created_at));
   return response({
-    members: filtered.slice(offset, offset + 50).map((user) => ({
-      id: user.id,
-      name: user.name,
-      username: decryptField(user.username_cipher),
-      role: user.role,
-      lastLoginAt: user.last_login_at,
-      createdAt: user.created_at
-    })),
+    members: filtered.slice(offset, offset + 50).map((user) => {
+      const rawXp = scores.get(user.id) ?? 0;
+      const totalXp = Number.isSafeInteger(rawXp) && rawXp >= 0 ? rawXp : 0;
+      const growth = progression(totalXp);
+      return {
+        id: user.id,
+        name: user.name,
+        username: decryptField(user.username_cipher),
+        role: user.role,
+        birthDate: decryptField(user.birth_date_cipher),
+        phone: decryptField(user.phone_cipher),
+        lastLoginAt: user.last_login_at,
+        createdAt: user.created_at,
+        totalXp,
+        level: growth.level,
+        houseStage: growth.houseStage,
+        houseName: growth.house.name
+      };
+    }),
     hasMore: filtered.length > offset + 50
   });
+}
+async function resetMemberXp(state, input) {
+  adminOnly(state);
+  if (input.confirm !== "RESET_XP") throw new ApiError(400, "\uC810\uC218 \uCD08\uAE30\uD654\uB97C \uB2E4\uC2DC \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
+  const targetId = string(input.userId, 36);
+  if (!targetId) throw new ApiError(400, "\uD68C\uC6D0\uC744 \uC120\uD0DD\uD574 \uC8FC\uC138\uC694.");
+  const userRef = database().collection("users").doc(targetId);
+  const dataRef = database().collection("app_data").doc(targetId);
+  const auditRef = database().collection("admin_audit").doc(randomUUID());
+  await database().runTransaction(async (transaction) => {
+    const [userSnapshot, dataSnapshot] = await Promise.all([transaction.get(userRef), transaction.get(dataRef)]);
+    const user = userSnapshot.data();
+    if (!user || user.role !== "USER") throw new ApiError(404, "\uCD08\uAE30\uD654\uD560 \uD68C\uC6D0\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
+    if (dataSnapshot.exists) {
+      const saved = dataSnapshot.data();
+      const data = appData(JSON.parse(decryptField(saved.data_cipher)));
+      data.character = characterAtXp(data.character, 0);
+      data.xpLogs = [];
+      transaction.update(dataRef, { ...saved, data_cipher: encryptField(JSON.stringify(data)), version: saved.version + 1, total_xp: 0, updated_at: (/* @__PURE__ */ new Date()).toISOString() });
+    }
+    transaction.create(auditRef, { actor_admin_id: state.primary.id, target_user_id: targetId, action: "XP_RESET", created_at: (/* @__PURE__ */ new Date()).toISOString() });
+  });
+  return response({ ok: true, totalXp: 0, level: 1, houseStage: 1 });
 }
 async function impersonate(req, state, input) {
   adminOnly(state);
@@ -869,6 +934,7 @@ async function handleRequest(req) {
       adminOnly(state);
       return await members(req);
     }
+    if (req.method === "POST" && action === "reset-member-xp") return await resetMemberXp(state, await body(req));
     if (req.method === "POST" && action === "impersonate") return await impersonate(req, state, await body(req));
     throw new ApiError(404, "\uC694\uCCAD\uD55C \uAE30\uB2A5\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
   } catch (error) {

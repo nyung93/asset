@@ -16,8 +16,9 @@ export function getCharacterMood(data: AppData, date: string): CharacterMood {
   const month = date.slice(0, 7);
   const current = data.transactions.filter(tx => tx.txDate.startsWith(`${month}-`) && tx.txDate <= date);
   const expenses = current.filter(tx => tx.type === 'EXPENSE').reduce((sum, tx) => sum + tx.amount, 0);
-  const budget = data.budgetCodes.reduce((sum, code) => sum + code.monthlyLimit, 0);
-  if (data.budgetCodes.length && expenses > budget) return {expression: 'frowning', message: '예산을 살짝 넘었네. 우리 다음 소비는 한 번 더 생각해 볼까?'};
+  const expenseCodes = data.budgetCodes.filter(code => !code.kind || code.kind === 'EXPENSE');
+  const budget = expenseCodes.reduce((sum, code) => sum + code.monthlyLimit, 0);
+  if (expenseCodes.length && expenses > budget) return {expression: 'frowning', message: '예산을 살짝 넘었네. 우리 다음 소비는 한 번 더 생각해 볼까?'};
   if (data.xpLogs.some(log => log.earnedDate === date)) return {expression: 'happy', message: '오늘도 한 걸음 자랐어! 작은 실천이 모이면 큰 자산이 돼.'};
   const goal = data.goals.find(item => item.year === Number(month.slice(0, 4)) && item.month === Number(month.slice(5)));
   const savings = current.filter(tx => tx.type === 'SAVING').reduce((sum, tx) => sum + tx.amount, 0);

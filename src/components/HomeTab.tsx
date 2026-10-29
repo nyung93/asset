@@ -25,7 +25,7 @@ export default function HomeTab({onNavigate}: {onNavigate: (tab: number) => void
   const missions = useMemo(() => getSettlementMissions(state, today), [state, today]);
   const mood = useMemo(() => getCharacterMood(state, today), [state, today]);
   const availableXp = missions.filter(mission => mission.eligible && !mission.claimed).reduce((sum, mission) => sum + mission.xpAmount, 0);
-  const budget = budgetCodes.reduce((sum, code) => sum + code.monthlyLimit, 0);
+  const budget = budgetCodes.filter(code => !code.kind || code.kind === 'EXPENSE').reduce((sum, code) => sum + code.monthlyLimit, 0);
   const expenses = transactions.filter(tx => tx.type === 'EXPENSE' && tx.txDate.startsWith(`${month}-`) && tx.txDate <= today).reduce((sum, tx) => sum + tx.amount, 0);
   const remaining = budget - expenses;
   const dailyClaimed = xpLogs.some(log => log.rewardType === 'DAILY_LOG' && log.referencePeriod === today);

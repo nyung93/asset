@@ -6,7 +6,8 @@ import { applyQuotes, carryInvestmentsForward } from '../lib/investments';
 import { isValidDate, todayDate } from '../lib/calendar';
 import { DEFAULT_AVATAR_CONFIG } from '../lib/avatar';
 import {validYearMonth} from '../lib/recurringExpenses';
-import type { AppData, AvatarConfig, BudgetCode, CharacterImageId, Goal, InvestmentMonthly, MarketQuote, RecurringExpense, Transaction, XpLog } from '../types';
+import {codeKind, nextCodeId} from '../lib/categoryCodes';
+import type { AppData, AvatarConfig, BudgetCode, BudgetCodeKind, CharacterImageId, Goal, InvestmentMonthly, MarketQuote, RecurringExpense, Transaction, XpLog } from '../types';
 export const HOUSE_NAMES = HOUSE_STAGES.map(stage => stage.name);
 export const initialData: AppData = {
   character: { totalXp: 0, level: 1, currentXp: 0, houseStage: 1, avatar: {...DEFAULT_AVATAR_CONFIG}, isCustomized: false },
@@ -17,7 +18,7 @@ function nonnegative(n: number) { return Number.isFinite(n) && n >= 0; }
 const validDate = isValidDate;
 function validateTransaction(tx: Transaction, codes: BudgetCode[]) {
   if (!validDate(tx.txDate) || !tx.txId || !Number.isSafeInteger(tx.amount) || tx.amount <= 0 || !['INCOME','EXPENSE','SAVING'].includes(tx.type)) throw new Error('거래 날짜와 금액을 확인해 주세요.');
-  if (!(codes.some(c => c.codeId === tx.codeId) || (tx.type === 'INCOME' && tx.codeId === 'INCOME') || (tx.type === 'SAVING' && tx.codeId === 'SAVING'))) throw new Error('유효한 예산 코드를 선택해 주세요.');
+  if (!(codes.some(c => c.codeId === tx.codeId && codeKind(c) === tx.type) || (tx.type === 'INCOME' && tx.codeId === 'INCOME') || (tx.type === 'SAVING' && tx.codeId === 'SAVING'))) throw new Error('거래 구분에 맞는 카테고리를 선택해 주세요.');
 }
 function growCharacter(character: AppData['character'], xp: number): AppData['character'] {
   return characterAtXp(character, character.totalXp + xp);
@@ -40,6 +41,7 @@ interface Actions {
   replaceAppData: (data: AppData) => void;
   resetAppData: () => void;
   saveBudgetCode: (code: BudgetCode, originalId?: string) => void;
+  createBudgetCode: (input: {categoryName:string;monthlyLimit:number;kind:BudgetCodeKind}) => string;
   deleteBudgetCode: (codeId: string) => void;
   saveGoal: (goal: Goal) => void;
   saveRecurringExpense: (expense: RecurringExpense) => void;
@@ -68,15 +70,23 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
   replaceAppData: data => set(migrateAppData(data,2)),
   resetAppData: () => set(structuredClone(initialData)),
   saveBudgetCode: (input, originalId) => {
-    const code = {...input, codeId: input.codeId.trim().toUpperCase(), categoryName: input.categoryName.trim()};
-    if (!/^[A-Z][A-Z0-9]{1,11}$/.test(code.codeId) || ['INCOME','SAVING'].includes(code.codeId)) throw new Error('코드는 영문으로 시작하는 영문·숫자 2~12자로 입력해 주세요.');
+    const previous = originalId ? get().budgetCodes.find(c => c.codeId === originalId) : undefined;
+    const code = {...input, codeId: input.codeId.trim().toUpperCase(), categoryName: input.categoryName.trim(), kind: input.kind ?? previous?.kind ?? 'EXPENSE'};
+    if (!/^[A-Z][A-Z0-9]{1,11}$/.test(code.codeId) || ['INCOME','SAVING'].includes(code.codeId)) throw new Error('카테고리 식별자가 올바르지 않아요.');
+    if (!['EXPENSE','INCOME','SAVING','INVESTMENT'].includes(code.kind)) throw new Error('카테고리 구분이 올바르지 않아요.');
     if (!code.categoryName || !Number.isSafeInteger(code.monthlyLimit) || !nonnegative(code.monthlyLimit)) throw new Error('카테고리명과 0 이상의 정수 예산을 입력해 주세요.');
     if (originalId && !get().budgetCodes.some(c => c.codeId === originalId)) throw new Error('수정할 코드가 없습니다.');
     if (get().budgetCodes.some(c => c.codeId === code.codeId && c.codeId !== originalId)) throw new Error('이미 사용 중인 코드입니다.');
-    set(s => ({ budgetCodes: originalId ? s.budgetCodes.map(c => c.codeId === originalId ? code : c) : [...s.budgetCodes, code], transactions: s.transactions.map(t => t.codeId === originalId ? {...t, codeId: code.codeId} : t), recurringExpenses:s.recurringExpenses.map(item=>item.codeId===originalId ? {...item,codeId:code.codeId} : item) }));
+    if (previous && codeKind(previous) !== code.kind && (get().transactions.some(tx => tx.codeId === originalId) || get().recurringExpenses.some(item => item.codeId === originalId) || get().investments.some(item => item.codeId === originalId))) throw new Error('사용 중인 카테고리의 구분은 변경할 수 없어요.');
+    set(s => ({ budgetCodes: originalId ? s.budgetCodes.map(c => c.codeId === originalId ? code : c) : [...s.budgetCodes, code], transactions: s.transactions.map(t => t.codeId === originalId ? {...t, codeId: code.codeId} : t), recurringExpenses:s.recurringExpenses.map(item=>item.codeId===originalId ? {...item,codeId:code.codeId} : item), investments:s.investments.map(item=>item.codeId===originalId ? {...item,codeId:code.codeId} : item) }));
+  },
+  createBudgetCode: input => {
+    const codeId = nextCodeId(get().budgetCodes, input.kind);
+    get().saveBudgetCode({...input, codeId});
+    return codeId;
   },
   deleteBudgetCode: codeId => {
-    if (get().transactions.some(t => t.codeId === codeId) || get().recurringExpenses.some(item=>item.codeId===codeId)) throw new Error('가계부 또는 정기 지출에 사용된 코드는 삭제할 수 없습니다.');
+    if (get().transactions.some(t => t.codeId === codeId) || get().recurringExpenses.some(item=>item.codeId===codeId) || get().investments.some(item=>item.codeId===codeId)) throw new Error('기록에 사용된 카테고리는 삭제할 수 없어요.');
     set(s => ({budgetCodes:s.budgetCodes.filter(c => c.codeId !== codeId)}));
   },
   saveGoal: goal => {
@@ -85,7 +95,7 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
   },
   saveRecurringExpense: input => {
     const expense={...input,name:input.name.trim()};
-    if(!expense.id || expense.id.length>64 || !expense.name || expense.name.length>40 || !Number.isInteger(expense.day) || expense.day<1 || expense.day>31 || !Number.isSafeInteger(expense.amount) || expense.amount<=0 || !validYearMonth(expense.startMonth) || !get().budgetCodes.some(code=>code.codeId===expense.codeId)) throw new Error('이름·납부일·금액·카테고리를 확인해 주세요.');
+    if(!expense.id || expense.id.length>64 || !expense.name || expense.name.length>40 || !Number.isInteger(expense.day) || expense.day<1 || expense.day>31 || !Number.isSafeInteger(expense.amount) || expense.amount<=0 || !validYearMonth(expense.startMonth) || !get().budgetCodes.some(code=>code.codeId===expense.codeId && codeKind(code)==='EXPENSE')) throw new Error('이름·납부일·금액·지출 카테고리를 확인해 주세요.');
     set(s=>({recurringExpenses:[...s.recurringExpenses.filter(item=>item.id!==expense.id),expense]}));
   },
   deleteRecurringExpense: id => set(s=>({
@@ -122,6 +132,7 @@ export const useAppStore = create<AppData & Actions>()(persist((set, get) => ({
   deleteTransaction: id => set(s => ({transactions:s.transactions.filter(t => t.txId !== id)})),
   saveInvestment: inv => {
     if (!inv.invId || !/^\d{4}-(0[1-9]|1[0-2])$/.test(inv.yearMonth) || !inv.tickerName.trim() || !nonnegative(inv.investedPrincipal) || !nonnegative(inv.currentValuation)) throw new Error('투자 정보를 확인해 주세요.');
+    if (inv.codeId && !get().budgetCodes.some(code => code.codeId === inv.codeId && codeKind(code) === 'INVESTMENT')) throw new Error('투자 카테고리를 다시 선택해 주세요.');
     let investment = {...inv};
     if (inv.ticker !== undefined) {
       if (!/^[A-Z0-9^][A-Z0-9.^=\-]{0,29}$/.test(inv.ticker) || !['KRW','USD'].includes(inv.currency ?? '') || !Number.isFinite(inv.quantity) || inv.quantity! <= 0 || inv.investedPrincipal <= 0 || inv.investedPrincipal > Number.MAX_SAFE_INTEGER || inv.quantity! > Number.MAX_SAFE_INTEGER) throw new Error('종목, 통화, 원금과 보유 수량을 확인해 주세요.');

@@ -1,4 +1,5 @@
 import type { BudgetCode, Transaction } from '../types';
+import {codeKind} from './categoryCodes';
 export const transactionTypes = ['INCOME', 'EXPENSE', 'SAVING'] as const;
 export const transactionStyle = {
   INCOME: {label: '수입', text: 'text-blue-600', bar: 'bg-blue-600', background: 'bg-blue-50', sign: '+'},
@@ -17,7 +18,7 @@ export function monthlyTransactions(transactions: Transaction[], yearMonth: stri
   return transactions.filter(tx => tx.txDate.slice(0, 7) === yearMonth);
 }
 export function budgetUsage(codes: BudgetCode[], transactions: Transaction[]) {
-  return codes.map(code => {
+  return codes.filter(code => codeKind(code) === 'EXPENSE').map(code => {
     const spent = transactions.filter(tx => tx.type === 'EXPENSE' && tx.codeId === code.codeId).reduce((sum, tx) => sum + tx.amount, 0);
     const exceeded = spent > code.monthlyLimit;
     const percent = code.monthlyLimit > 0 ? spent / code.monthlyLimit * 100 : null;

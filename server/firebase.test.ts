@@ -22,7 +22,7 @@ class MemoryFirestore {
           async delete() {rows.delete(key);},
         };
       },
-      async get() {return {docs:[...rows].filter(([key])=>key.startsWith(`${name}/`)).map(([,value])=>({data:()=>structuredClone(value)}))};},
+      async get() {return {docs:[...rows].filter(([key])=>key.startsWith(`${name}/`)).map(([key,value])=>({id:key.slice(name.length+1),data:()=>structuredClone(value)}))};},
     };
   }
   async runTransaction<T>(run:(transaction:{get:(ref:ReturnType<ReturnType<MemoryFirestore['collection']>['doc']>)=>ReturnType<ReturnType<ReturnType<MemoryFirestore['collection']>['doc']>['get']>;
@@ -143,6 +143,7 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     const both=`${adminCookie}; ${impersonationCookie}`;
     assert.equal((await handleRequest(request('status','GET',undefined,both)).then(res=>res.json())).user.id,user.id);
     assert.equal(await handleRequest(request('dashboard','GET',undefined,both)).then(res=>res.status),403);
+    assert.equal(await handleRequest(request('reset-member-xp','POST',{userId:user.id,confirm:'RESET_XP'},both)).then(res=>res.status),403);
     assert.equal((await handleRequest(request('stop-impersonation','POST',{},both)).then(res=>res.json())).user.id,adminId);
     const other=await handleRequest(request('register','POST',{
       name:'다른 회원',birthDate:'1996-06-17',phone:'010-2222-3333',username:'otheruser',password:'Other!1234',
@@ -158,6 +159,23 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     assert.equal(await handleRequest(request('data','POST',{data:otherData,version:0},sessionCookie(other),otherId)).then(res=>res.status),200);
     assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(other),otherId)).then(res=>res.json())).data,otherData);
     assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(login),user.id)).then(res=>res.json())).data,data);
+    const scoreMember=(await handleRequest(request('members','GET',undefined,adminCookie)).then(res=>res.json())).members.find((item:{id:string})=>item.id===otherId);
+    assert.equal(scoreMember.totalXp,99);
+    assert.equal(scoreMember.level,1);
+    assert.equal(scoreMember.birthDate,'1996-06-17');
+    assert.equal(scoreMember.phone,'01022223333');
+    assert.equal(await handleRequest(request('reset-member-xp','POST',{userId:otherId,confirm:'RESET_XP'},sessionCookie(other))).then(res=>res.status),403);
+    assert.equal(await handleRequest(request('reset-member-xp','POST',{userId:otherId},adminCookie)).then(res=>res.status),400);
+    assert.equal((await handleRequest(request('reset-member-xp','POST',{userId:otherId,confirm:'RESET_XP'},adminCookie)).then(res=>res.json())).level,1);
+    const resetData=await handleRequest(request('data','GET',undefined,sessionCookie(other),otherId)).then(res=>res.json());
+    assert.equal(resetData.version,2);
+    assert.equal(resetData.data.character.totalXp,0);
+    assert.equal(resetData.data.character.houseStage,1);
+    assert.deepEqual(resetData.data.xpLogs,[]);
+    assert.deepEqual(resetData.data.transactions,otherData.transactions);
+    assert.equal(db.rows.get(`app_data/${otherId}`)?.total_xp,0);
+    assert.equal(await handleRequest(request('data','POST',{data:otherData,version:1},sessionCookie(other),otherId)).then(res=>res.status),409);
+    assert.equal([...db.rows.values()].some(row=>row.action==='XP_RESET' && row.target_user_id===otherId),true);
     const remembered=await handleRequest(request('login','POST',{username:'test1',password:input.password,remember:true}));
     assert.equal((await remembered.clone().json()).remembered,true);
     assert.match(remembered.headers.getSetCookie().find(item=>item.startsWith('rgt_remember='))!,/Max-Age=604800/);

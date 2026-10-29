@@ -11,7 +11,8 @@ export interface AvatarConfig {
   faceExpression?: CharacterExpression;
 }
 export interface CharacterState { totalXp: number; level: number; currentXp: number; houseStage: FiveVariant; avatar: AvatarConfig; isCustomized: boolean; selectedCharacterId?: CharacterImageId }
-export interface BudgetCode { codeId: string; categoryName: string; monthlyLimit: number }
+export type BudgetCodeKind = 'EXPENSE' | 'INCOME' | 'SAVING' | 'INVESTMENT';
+export interface BudgetCode { codeId: string; categoryName: string; monthlyLimit: number; kind?: BudgetCodeKind }
 export interface Transaction { txId: string; txDate: string; type: 'INCOME' | 'EXPENSE' | 'SAVING'; codeId: string; amount: number; memo: string }
 export interface Goal { year: number; month: number; targetSavingAmount: number; targetInvestReturnRate: number }
 export interface RecurringExpense { id: string; name: string; day: number; amount: number; codeId: string; startMonth: string }
@@ -31,6 +32,7 @@ export interface InvestmentMonthly {
   quoteTime?: string;
   fetchedAt?: string;
   valuationSource?: 'market' | 'principal';
+  codeId?: string;
 }
 export interface XpLog { logId: string; earnedDate: string; rewardType: 'DAILY_LOG' | 'MONTHLY_BUDGET' | 'MONTHLY_SAVING' | 'MONTHLY_INVEST' | 'ANNUAL_GOAL'; referencePeriod: string; xpAmount: number }
 export interface AppData { character: CharacterState; budgetCodes: BudgetCode[]; transactions: Transaction[]; goals: Goal[]; investments: InvestmentMonthly[]; xpLogs: XpLog[]; recurringExpenses: RecurringExpense[]; recurringExpensePayments: RecurringExpensePayment[] }

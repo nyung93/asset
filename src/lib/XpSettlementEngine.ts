@@ -1,4 +1,5 @@
 import type { AppData, InvestmentMonthly, XpLog } from '../types';
+import {codeKind} from './categoryCodes';
 import { isValidDate } from './calendar';
 import { isTracked } from './investments';
 
@@ -53,15 +54,16 @@ export function getSettlementMissions(data: AppData, date: string): XpMission[] 
   const spent = monthly.filter(tx => tx.type === 'EXPENSE').reduce((sum, tx) => sum + tx.amount, 0);
   const saving = monthly.filter(tx => tx.type === 'SAVING').reduce((sum, tx) => sum + tx.amount, 0);
   const yearSaving = transactions.filter(tx => tx.txDate.startsWith(`${year}-`) && tx.type === 'SAVING').reduce((sum, tx) => sum + tx.amount, 0);
-  const budget = data.budgetCodes.reduce((sum, code) => sum + code.monthlyLimit, 0);
+  const expenseCodes = data.budgetCodes.filter(code => codeKind(code) === 'EXPENSE');
+  const budget = expenseCodes.reduce((sum, code) => sum + code.monthlyLimit, 0);
   const monthlyGoal = data.goals.find(goal => goal.year === Number(year) && goal.month === Number(period.slice(5)));
   const annualGoal = data.goals.find(goal => goal.year === Number(year) && goal.month === 0);
   const monthlyInvestment = portfolioGoalStatus(data.investments.filter(record => record.yearMonth === period), monthlyGoal?.targetInvestReturnRate ?? 0);
   const annualInvestment = portfolioGoalStatus(latestAnnualInvestments(data.investments, year, period), annualGoal?.targetInvestReturnRate ?? 0);
   const missions = [
     {type: 'MONTHLY_BUDGET' as const, period, title: '이번 달 예산 지킴이', xpAmount: 150,
-      eligible: data.budgetCodes.length > 0 && spent <= budget,
-      description: data.budgetCodes.length ? `지출 ${amount(spent)}원 / 예산 ${amount(budget)}원` : '목표 & 설정에서 예산 코드를 추가해 주세요.'},
+      eligible: expenseCodes.length > 0 && spent <= budget,
+      description: expenseCodes.length ? `지출 ${amount(spent)}원 / 예산 ${amount(budget)}원` : '목표 & 설정에서 지출 카테고리를 추가해 주세요.'},
     {type: 'MONTHLY_SAVING' as const, period, title: '차곡차곡 저축 달성', xpAmount: 200,
       eligible: Boolean(monthlyGoal && saving >= monthlyGoal.targetSavingAmount),
       description: monthlyGoal ? `저축 ${amount(saving)}원 / 목표 ${amount(monthlyGoal.targetSavingAmount)}원` : '이번 달 저축 목표를 먼저 저장해 주세요.'},

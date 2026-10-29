@@ -5,7 +5,7 @@ export interface AccountUser {
   role:'USER'|'ADMIN'; createdAt:string; lastLoginAt:string|null;
 }
 export interface AccountSession {user:AccountUser; impersonating:boolean; remembered:boolean; adminName?:string}
-export interface AdminMember {id:string;name:string;username:string;role:'USER'|'ADMIN';lastLoginAt:string|null;createdAt:string}
+export interface AdminMember {id:string;name:string;username:string;role:'USER'|'ADMIN';birthDate:string;phone:string;lastLoginAt:string|null;createdAt:string;totalXp:number;level:number;houseStage:number;houseName:string}
 export interface AdminDashboardData {
   users:{total_users:number;new_users_this_month:number;active_users_30d:number};
   data:{transaction_count:string;total_expense:string;total_saving:string;total_xp:string};
@@ -38,5 +38,6 @@ export const accountApi={
   dashboard:()=>call<AdminDashboardData>('dashboard'),
   members:(search:string,offset=0)=>call<{members:AdminMember[];hasMore:boolean}>('members','GET',undefined,{search,offset:String(offset)}),
   impersonate:(userId:string)=>call<AccountSession>('impersonate','POST',{userId}),
+  resetMemberXp:(userId:string)=>call<{ok:boolean;totalXp:number;level:number;houseStage:number}>('reset-member-xp','POST',{userId,confirm:'RESET_XP'}),
   stopImpersonation:()=>call<AccountSession>('stop-impersonation','POST'),
 };

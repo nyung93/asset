@@ -46,7 +46,7 @@ test('upload automatically fills editable fields using a resized JPEG; save alon
   expect((await snapshot(page)).xpLogs).toHaveLength(0);
   await expect(form(page).getByLabel('날짜',{exact:true})).toHaveValue('2024-02-29');
   await expect(form(page).getByLabel('구분',{exact:true})).toHaveValue('EXPENSE');
-  await expect(form(page).getByLabel('예산 코드',{exact:true})).toHaveValue('FO01');
+  await expect(form(page).getByLabel('카테고리',{exact:true})).toHaveValue('FO01');
   await form(page).screenshot({path:testInfo.outputPath('receipt-autofill.png')});
   await form(page).getByLabel('금액 (원)',{exact:true}).fill('12000');
   await form(page).getByLabel('메모').fill('확인한 점심');
@@ -69,10 +69,10 @@ test('partial amount preserves draft date and memo and requires a real budget se
   await expect(form(page).getByLabel('날짜',{exact:true})).toHaveValue('2026-10-22');
   await expect(form(page).getByLabel('메모')).toHaveValue('이미 적은 메모');
   await expect(form(page).getByLabel('금액 (원)',{exact:true})).toHaveValue('8900');
-  await expect(form(page).getByLabel('예산 코드',{exact:true})).toHaveValue('');
+  await expect(form(page).getByLabel('카테고리',{exact:true})).toHaveValue('');
   await form(page).getByRole('button',{name:'기록 저장',exact:true}).click();
   await expect(form(page)).toBeVisible();expect((await snapshot(page)).transactions).toHaveLength(0);
-  await form(page).getByLabel('예산 코드',{exact:true}).selectOption('SH01');
+  await form(page).getByLabel('카테고리',{exact:true}).selectOption('SH01');
   await form(page).getByRole('button',{name:'기록 저장',exact:true}).click();
   expect((await snapshot(page)).transactions[0].codeId).toBe('SH01');
 });
@@ -119,7 +119,7 @@ test('invalid and corrupt uploads stay local; leisure maps to the existing categ
   await expect(sheet(page).getByRole('alert')).toContainText('사진을 열지 못했어요');expect(calls).toBe(0);
   await input.setInputFiles(await fixture(page));
   await expect(sheet(page)).not.toBeVisible();
-  await expect(form(page).getByLabel('예산 코드',{exact:true})).toHaveValue('LE01');
+  await expect(form(page).getByLabel('카테고리',{exact:true})).toHaveValue('LE01');
 });
 
 test('real Canvas keeps aspect ratio, avoids upscaling, and composites transparency on white',async({page})=>{

@@ -20,6 +20,7 @@ async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
   const saves:unknown[]=[];
   let savedData:unknown=null;
   let version=0;
+  let score=450;
   await page.context().route('**/api/index?**',async route=>{
     const request=route.request();
     const action=new URL(request.url()).searchParams.get('action');
@@ -32,8 +33,9 @@ async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
     if(action==='data'&&request.method()==='GET') return respond({data:savedData,version});
     if(action==='data'&&request.method()==='POST') {saves.push(payload);savedData=payload.data;version++;return respond({version});}
     if(action==='profile') return respond({user:{...person,birthDate:payload.birthDate,phone:payload.phone},impersonating:false,remembered});
-    if(action==='dashboard') return respond({users:{total_users:12,new_users_this_month:3,active_users_30d:8},data:{transaction_count:'34',total_expense:'100000',total_saving:'50000',total_xp:'450'}});
-    if(action==='members') return respond({members:[{id:person.id,name:person.name,username:person.username,role:'USER',createdAt:person.createdAt,lastLoginAt:person.lastLoginAt}],hasMore:false});
+    if(action==='dashboard') return respond({users:{total_users:12,new_users_this_month:3,active_users_30d:8},data:{transaction_count:'34',total_expense:'100000',total_saving:'50000',total_xp:String(score)}});
+    if(action==='members') return respond({members:[{id:person.id,name:person.name,username:person.username,role:'USER',birthDate:person.birthDate,phone:person.phone,createdAt:person.createdAt,lastLoginAt:person.lastLoginAt,totalXp:score,level:score?5:1,houseStage:1,houseName:'아늑한 반지하 원룸'}],hasMore:false});
+    if(action==='reset-member-xp') {if(current!=='admin') return respond({error:'관리자 권한이 필요해요.',code:'forbidden'},403);score=0;return respond({ok:true,totalXp:0,level:1,houseStage:1});}
     if(action==='impersonate') {current='user';return respond({user:person,impersonating:true,adminName:admin.name});}
     if(action==='stop-impersonation') {current='admin';return respond({user:admin,impersonating:false});}
     if(action==='logout') {current='guest';remembered=false;return respond({ok:true});}
@@ -178,12 +180,21 @@ test('login opens account data and immutable profile fields',async({page})=>{
   await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
 });
 
-test('admin dashboard lists members and account access can be ended',async({page})=>{
-  await openAuthenticated(page,'admin');
+test('admin sees member details, resets XP and enters member account',async({page})=>{
+  const api=await openAuthenticated(page,'admin');
   await page.getByRole('button',{name:'관리자',exact:true}).first().click();
   await expect(page.getByRole('heading',{name:'관리자 대시보드'})).toBeVisible();
   await expect(page.getByText('전체 회원')).toBeVisible();
   await expect(page.getByRole('cell',{name:'minyoung'})).toBeVisible();
+  await page.getByRole('button',{name:'정보 보기'}).click();
+  const detail=page.getByRole('dialog',{name:'민영 회원 정보'});
+  await expect(detail).toContainText('01012345678');
+  await expect(detail).toContainText('450 XP');
+  await detail.getByRole('button',{name:'점수 초기화'}).click();
+  await detail.getByRole('button',{name:'XP 초기화 확인'}).click();
+  await expect(detail).toContainText('0 XP');
+  expect(api.actions).toContain('reset-member-xp');
+  await detail.getByRole('button',{name:'닫기'}).click();
   await page.getByRole('button',{name:'계정 접속'}).click();
   await expect(page.getByText(/회원 계정을 보고 있어요/)).toBeVisible();
   await page.getByRole('button',{name:'관리자로 돌아가기'}).click();

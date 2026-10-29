@@ -1,5 +1,6 @@
 import { isValidDate } from '../lib/calendar';
 import type { BudgetCode } from '../types';
+import {codeKind} from '../lib/categoryCodes';
 
 export interface ParseResult {
   status: 'SUCCESS' | 'PARTIAL' | 'FAILED';
@@ -46,8 +47,8 @@ export function parseReceiptResponse(text: string): ParseResult {
 /** Preserve existing budget IDs and history. Only the original leisure preset is aliased. */
 export function resolveReceiptCode(recommendedCodeId: string | undefined, budgetCodes: BudgetCode[]): string | undefined {
   if (!recommendedCodeId) return undefined;
-  if (budgetCodes.some(code => code.codeId === recommendedCodeId)) return recommendedCodeId;
-  if (recommendedCodeId === 'CU01' && budgetCodes.some(code => code.codeId === 'LE01' && code.categoryName === '문화/여가')) return 'LE01';
+  if (budgetCodes.some(code => code.codeId === recommendedCodeId && codeKind(code) === 'EXPENSE')) return recommendedCodeId;
+  if (recommendedCodeId === 'CU01' && budgetCodes.some(code => code.codeId === 'LE01' && code.categoryName === '문화/여가' && codeKind(code) === 'EXPENSE')) return 'LE01';
   return undefined;
 }
 

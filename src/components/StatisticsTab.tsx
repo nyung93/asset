@@ -4,11 +4,12 @@ import { useAppStore } from '../store';
 import { addMonths, isValidMonth, todayDate } from '../lib/calendar';
 import { budgetUsage, formatWon, monthlyTransactions, signedAmount, summarize, transactionStyle, transactionTypes } from '../lib/finance';
 import { generateMonthlyAdvice } from '../utils/aiAdvisor';
+import {codeKind} from '../lib/categoryCodes';
 import CharacterAvatar from './CharacterAvatar';
 
 export default function StatisticsTab() {
   const transactions = useAppStore(s => s.transactions);
-  const codes = useAppStore(s => s.budgetCodes);
+  const codes = useAppStore(s => s.budgetCodes).filter(code => codeKind(code) === 'EXPENSE');
   const investments = useAppStore(s => s.investments);
   const avatar = useAppStore(s => s.character.avatar);
   const isCustomized = useAppStore(s => s.character.isCustomized);
@@ -110,7 +111,7 @@ export default function StatisticsTab() {
         <div className="space-y-7">
           {usage.map(code => <article key={code.codeId}>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold">{code.categoryName}<span className="ml-2 rounded bg-slate-100 px-1.5 py-1 text-xs font-normal text-slate-500">{code.codeId}</span></h3>
+              <h3 className="text-sm font-semibold">{code.categoryName}</h3>
               <p className="text-xs"><span className={code.exceeded ? 'font-semibold text-rose-500' : 'font-semibold'}>{formatWon(code.spent)}원</span><span className="text-slate-400"> / {formatWon(code.monthlyLimit)}원</span></p>
             </div>
             <div className="mt-3 h-2.5 overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-label={`${code.categoryName} 예산 사용률`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={code.barPercent} aria-valuetext={`${formatWon(code.spent)}원 / ${formatWon(code.monthlyLimit)}원${code.exceeded ? ', 예산 초과' : ''}`}>

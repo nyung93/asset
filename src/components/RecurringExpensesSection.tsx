@@ -3,6 +3,7 @@ import {Pencil,Plus,Trash2,X} from 'lucide-react';
 import {useAppStore} from '../store';
 import {recurringMonthSummary} from '../lib/recurringExpenses';
 import type {RecurringExpense} from '../types';
+import {codeKind} from '../lib/categoryCodes';
 
 const won=(value:number)=>new Intl.NumberFormat('ko-KR').format(value);
 
@@ -13,7 +14,7 @@ function Dialog({title,onClose,children}:{title:string;onClose:()=>void;children
 }
 
 function ExpenseForm({period,editing,onClose}:{period:string;editing:RecurringExpense|null;onClose:()=>void}) {
-  const codes=useAppStore(s=>s.budgetCodes);
+  const codes=useAppStore(s=>s.budgetCodes).filter(code=>codeKind(code)==='EXPENSE');
   const save=useAppStore(s=>s.saveRecurringExpense);
   const [name,setName]=useState(editing?.name??'');
   const [day,setDay]=useState(String(editing?.day??1));
@@ -38,7 +39,7 @@ function ExpenseForm({period,editing,onClose}:{period:string;editing:RecurringEx
         <div><label className="field-label" htmlFor="recurring-amount">예정 금액 (원)</label><input id="recurring-amount" className="standalone-input" type="number" min="1" step="1" required value={amount} onChange={e=>setAmount(e.target.value)}/></div>
       </div>
       <label className="field-label" htmlFor="recurring-category">예산 카테고리</label>
-      <select id="recurring-category" className="standalone-input" required value={codeId} onChange={e=>setCodeId(e.target.value)}>{codes.map(code=><option key={code.codeId} value={code.codeId}>{code.categoryName} ({code.codeId})</option>)}</select>
+      <select id="recurring-category" className="standalone-input" required value={codeId} onChange={e=>setCodeId(e.target.value)}>{codes.map(code=><option key={code.codeId} value={code.codeId}>{code.categoryName}</option>)}</select>
       <p className="muted mt-3 text-xs leading-5">31일이 없는 달은 마지막 날을 납부일로 표시해요.</p>
       {error && <p role="alert" className="mt-3 text-sm text-rose-600">{error}</p>}
       <div className="mt-5 flex gap-2"><button type="button" className="button-secondary flex-1" onClick={onClose}>취소</button><button className="button-primary flex-1" type="submit">저장하기</button></div>
@@ -49,7 +50,7 @@ function ExpenseForm({period,editing,onClose}:{period:string;editing:RecurringEx
 export default function RecurringExpensesSection({period}:{period:string}) {
   const expenses=useAppStore(s=>s.recurringExpenses);
   const payments=useAppStore(s=>s.recurringExpensePayments);
-  const codes=useAppStore(s=>s.budgetCodes);
+  const codes=useAppStore(s=>s.budgetCodes).filter(code=>codeKind(code)==='EXPENSE');
   const remove=useAppStore(s=>s.deleteRecurringExpense);
   const togglePaid=useAppStore(s=>s.toggleRecurringExpensePaid);
   const [editing,setEditing]=useState<RecurringExpense|null|undefined>(undefined);

@@ -5,6 +5,8 @@ import {GeminiRequestError, generateGemini} from './gemini';
 import {ADVISOR_SYSTEM_PROMPT, advisorDataPrompt, parseAdvisorResponse, type MonthlyAdvisorSummary} from '../src/utils/aiAdvisor';
 import {RECEIPT_PROMPT, parseReceiptResponse} from '../src/utils/receiptParser';
 import {financeQuote} from './financeQuote';
+import {characterAtXp, progression} from '../src/lib/progression';
+import type {CharacterState} from '../src/types';
 
 type Role = 'USER' | 'ADMIN';
 interface UserRow {
@@ -366,13 +368,44 @@ async function members(req: Request): Promise<Response> {
   let lookup = '';
   try {if (search) lookup = usernameLookup(search);} catch { /* Search by name only. */ }
   const normalized = search.toLocaleLowerCase('ko-KR');
-  const users = await database().collection('users').get();
+  const [users,data] = await Promise.all([database().collection('users').get(),database().collection('app_data').get()]);
+  const scores = new Map(data.docs.map(doc => [doc.id, Number((doc.data() as DataRow).total_xp) || 0]));
   const filtered = users.docs.map(doc => doc.data() as UserRow & {username_lookup:string})
     .filter(user => !search || user.name.toLocaleLowerCase('ko-KR').includes(normalized) || user.username_lookup===lookup)
     .sort((left,right) => right.created_at.localeCompare(left.created_at));
-  return response({members:filtered.slice(offset,offset+50).map(user => ({id:user.id,name:user.name,
-    username:decryptField(user.username_cipher),role:user.role,lastLoginAt:user.last_login_at,createdAt:user.created_at})),
+  return response({members:filtered.slice(offset,offset+50).map(user => {
+    const rawXp = scores.get(user.id) ?? 0;
+    const totalXp = Number.isSafeInteger(rawXp) && rawXp >= 0 ? rawXp : 0;
+    const growth = progression(totalXp);
+    return {id:user.id,name:user.name,username:decryptField(user.username_cipher),role:user.role,
+      birthDate:decryptField(user.birth_date_cipher),phone:decryptField(user.phone_cipher),
+      lastLoginAt:user.last_login_at,createdAt:user.created_at,totalXp,level:growth.level,houseStage:growth.houseStage,houseName:growth.house.name};
+  }),
     hasMore:filtered.length>offset+50});
+}
+
+async function resetMemberXp(state:AuthState,input:JsonObject):Promise<Response> {
+  adminOnly(state);
+  if (input.confirm !== 'RESET_XP') throw new ApiError(400,'점수 초기화를 다시 확인해 주세요.');
+  const targetId = string(input.userId,36);
+  if (!targetId) throw new ApiError(400,'회원을 선택해 주세요.');
+  const userRef = database().collection('users').doc(targetId);
+  const dataRef = database().collection('app_data').doc(targetId);
+  const auditRef = database().collection('admin_audit').doc(randomUUID());
+  await database().runTransaction(async transaction => {
+    const [userSnapshot,dataSnapshot] = await Promise.all([transaction.get(userRef),transaction.get(dataRef)]);
+    const user = userSnapshot.data() as UserRow|undefined;
+    if (!user || user.role !== 'USER') throw new ApiError(404,'초기화할 회원을 찾을 수 없어요.');
+    if (dataSnapshot.exists) {
+      const saved = dataSnapshot.data() as DataRow;
+      const data = appData(JSON.parse(decryptField(saved.data_cipher)));
+      data.character = characterAtXp(data.character as CharacterState,0);
+      data.xpLogs = [];
+      transaction.update(dataRef,{...saved,data_cipher:encryptField(JSON.stringify(data)),version:saved.version+1,total_xp:0,updated_at:new Date().toISOString()});
+    }
+    transaction.create(auditRef,{actor_admin_id:state.primary.id,target_user_id:targetId,action:'XP_RESET',created_at:new Date().toISOString()});
+  });
+  return response({ok:true,totalXp:0,level:1,houseStage:1});
 }
 
 async function impersonate(req: Request,state: AuthState,input: JsonObject): Promise<Response> {
@@ -463,6 +496,7 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (req.method === 'POST' && action === 'ai-receipt') return await aiReceipt(state,await body(req,1_900_000));
     if (req.method === 'GET' && action === 'dashboard') {adminOnly(state);return await dashboard();}
     if (req.method === 'GET' && action === 'members') {adminOnly(state);return await members(req);}
+    if (req.method === 'POST' && action === 'reset-member-xp') return await resetMemberXp(state,await body(req));
     if (req.method === 'POST' && action === 'impersonate') return await impersonate(req,state,await body(req));
     throw new ApiError(404,'요청한 기능을 찾을 수 없어요.');
   } catch (error) {

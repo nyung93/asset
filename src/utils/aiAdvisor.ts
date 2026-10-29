@@ -1,5 +1,6 @@
 import type { BudgetCode, InvestmentMonthly, Transaction } from '../types';
 import { isTracked, returnRate } from '../lib/investments';
+import {codeKind} from '../lib/categoryCodes';
 
 export interface MonthlyAdvisorInput {
   transactions: Transaction[];
@@ -49,7 +50,7 @@ export function summarizeMonthForAdvisor(input: MonthlyAdvisorInput, yearMonth: 
   }).filter(item => Number.isFinite(item.rate));
   return {
     yearMonth,
-    totalBudget: input.budgetCodes.reduce((sum, code) => sum + code.monthlyLimit, 0),
+    totalBudget: input.budgetCodes.filter(code => codeKind(code) === 'EXPENSE').reduce((sum, code) => sum + code.monthlyLimit, 0),
     totalExpenses: expenses.reduce((sum, transaction) => sum + transaction.amount, 0),
     topCategory: categories[0] ?? null,
     investmentReturns,
@@ -58,7 +59,7 @@ export function summarizeMonthForAdvisor(input: MonthlyAdvisorInput, yearMonth: 
 
 export function advisorDataPrompt(summary: MonthlyAdvisorSummary): string {
   const category = summary.topCategory
-    ? `${summary.topCategory.categoryName}(${summary.topCategory.codeId}) ${money(summary.topCategory.amount)}`
+    ? `${summary.topCategory.categoryName} ${money(summary.topCategory.amount)}`
     : '지출 기록 없음';
   const returns = summary.investmentReturns.length
     ? summary.investmentReturns.map(item => `${item.currency} ${item.rate > 0 ? '+' : ''}${item.rate.toFixed(2)}%`).join(' · ')

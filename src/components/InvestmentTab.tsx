@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState, type FormEvent } from 'react';
-import { ArrowDownRight, ArrowUpRight, Check, Pencil, Plus, RefreshCw, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Info, Pencil, Plus, RefreshCw, Search } from 'lucide-react';
 import stockData from '../data/stocks.json';
 import type { InvestmentMonthly, MarketQuote, Stock } from '../types';
 import { useAppStore } from '../store';
 import { addMonths, isValidMonth, todayDate } from '../lib/calendar';
 import { investmentMoney, isTracked, percentLabel, previousMonthChange, profitColor, returnRate, summarizeCurrency, summarizePortfolio } from '../lib/investments';
 import { fetchCurrentPrice } from '../utils/financeApi';
+import {codeKind} from '../lib/categoryCodes';
 import Dialog from './Dialog';
 
 const stocks = stockData as Stock[];
@@ -58,6 +59,8 @@ function InvestmentForm({investment, onClose, onSaved}: {
   const [stock, setStock] = useState<Stock | null>(() => stocks.find(item => item.ticker === investment?.ticker) ?? null);
   const [principal, setPrincipal] = useState(investment ? String(investment.investedPrincipal) : '');
   const [quantity, setQuantity] = useState(investment?.quantity ? String(investment.quantity) : '');
+  const investmentCodes = useAppStore(s => s.budgetCodes).filter(code => codeKind(code) === 'INVESTMENT');
+  const [categoryId, setCategoryId] = useState(investment?.codeId ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const alive = useRef(true);
@@ -83,6 +86,7 @@ function InvestmentForm({investment, onClose, onSaved}: {
       const record: InvestmentMonthly = {
         invId: investment?.yearMonth === yearMonth ? investment.invId : crypto.randomUUID(), yearMonth,
         tickerName: stock.name, ticker: stock.ticker, currency: stock.currency,
+        codeId: categoryId || undefined,
         investedPrincipal: cost, quantity: shares, purchasePrice: cost / shares,
         currentValuation: valuation, lastPrice,
         quoteTime: validQuote?.marketTime ?? investment?.quoteTime,
@@ -106,6 +110,8 @@ function InvestmentForm({investment, onClose, onSaved}: {
       <input className="standalone-input" id="invest-principal" type="number" required min="0.01" step="any" max={Number.MAX_SAFE_INTEGER} value={principal} disabled={busy} onChange={event => setPrincipal(event.target.value)} placeholder={stock?.currency === 'KRW' ? '예: 1000000' : '예: 2000'}/>
       <label className="field-label" htmlFor="invest-quantity">보유 수량 (주)</label>
       <input className="standalone-input" id="invest-quantity" type="number" required min="0.00000001" step="any" max={Number.MAX_SAFE_INTEGER} value={quantity} disabled={busy} onChange={event => setQuantity(event.target.value)} placeholder="소수점 수량도 입력할 수 있어요"/>
+      <label className="field-label" htmlFor="invest-category">투자 카테고리</label>
+      <select id="invest-category" className="standalone-input" value={categoryId} disabled={busy} onChange={event => setCategoryId(event.target.value)}><option value="">미지정</option>{investmentCodes.map(code => <option key={code.codeId} value={code.codeId}>{code.categoryName}</option>)}</select>
       <p className="mt-3 text-xs text-slate-500">평균 매수 단가: {stock && Number.isFinite(average) && average > 0 ? investmentMoney(average, stock.currency) : '—'}</p>
       <p className="mt-4 rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500">미국 종목의 원금은 달러로 입력해 주세요. 원금과 수량으로 평균 매수 단가를 계산하며, 배당·세금·환율 변동은 수익률에 포함하지 않아요.</p>
       <p role="alert" className="mt-3 text-sm text-rose-500">{error}</p>
@@ -115,21 +121,84 @@ function InvestmentForm({investment, onClose, onSaved}: {
   </Dialog>;
 }
 
-function StockCard({investment, investments, historic, notUpdated, onEdit}: {
-  investment: InvestmentMonthly; investments: InvestmentMonthly[]; historic: boolean; notUpdated: boolean; onEdit: () => void;
+const quantityLabel = (value: number) => new Intl.NumberFormat('ko-KR', {maximumFractionDigits: 8}).format(value);
+const PAGE_SIZE = 10;
+
+function HoldingsTable({records, currency, onDetails}: {
+  records: InvestmentMonthly[]; currency: 'KRW' | 'USD'; onDetails: (id: string) => void;
 }) {
-  const rate = returnRate(investment);
-  const change = previousMonthChange(investment, investments);
-  return <article className="card !p-3 min-w-0 self-start">
-    <div className="flex items-start justify-between gap-1">
-      <div className="min-w-0"><p className="truncate text-[10px] font-medium text-slate-500">{investment.ticker} · {investment.currency}</p><h3 className="mt-0.5 line-clamp-2 text-xs font-bold leading-snug">{investment.tickerName}</h3></div>
-      {!historic && <button className="icon-button !h-7 !w-7 shrink-0 !p-1.5" aria-label={`${investment.tickerName} 수정`} onClick={onEdit}><Pencil size={13}/></button>}
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [scroll, setScroll] = useState({overflow: false, start: true, end: true, progress: 0, thumb: 1});
+  const measure = useCallback(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    const maximum = Math.max(0, element.scrollWidth - element.clientWidth);
+    setScroll({overflow: maximum > 2, start: element.scrollLeft <= 2, end: element.scrollLeft >= maximum - 2,
+      progress: maximum ? element.scrollLeft / maximum : 0, thumb: element.scrollWidth ? element.clientWidth / element.scrollWidth : 1});
+  }, []);
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element) return;
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    const table = element.querySelector('table');
+    if (table) observer.observe(table);
+    return () => observer.disconnect();
+  }, [records.length, measure]);
+  const move = (direction: -1 | 1) => {
+    const element = scrollRef.current;
+    if (element) element.scrollBy({left: direction * Math.max(220, element.clientWidth * .75), behavior: 'smooth'});
+  };
+  return <div className="mt-3 min-w-0 overflow-hidden rounded-lg border border-[#dce7ee] bg-white">
+    <div ref={scrollRef} tabIndex={0} onScroll={measure} role="region" aria-label={`${currency === 'KRW' ? '국내' : '해외'} 보유 종목 표 가로 스크롤`} className="portfolio-scroll overflow-x-auto overscroll-x-contain">
+      <table className="portfolio-table">
+        <thead><tr><th scope="col">종목</th><th scope="col">평가금액</th><th scope="col">수량</th><th scope="col">원금</th><th scope="col">단가</th><th scope="col">수익률</th></tr></thead>
+        <tbody>{records.map(item => {
+          const rate = returnRate(item);
+          const status = item.valuationSource === 'principal' ? '시세 미확인' : undefined;
+          return <tr key={item.invId}>
+            <th scope="row"><button type="button" className="portfolio-name" onClick={() => onDetails(item.invId)} aria-label={`${item.tickerName} 상세 보기`}><span className="portfolio-name-text" title={item.tickerName}>{item.tickerName}</span><span className="block text-[11px] font-normal text-[#8a9ba6]">{item.ticker}</span></button></th>
+            <td title={investmentMoney(item.currentValuation, currency)} className="font-semibold">{investmentMoney(item.currentValuation, currency)}{status && <span className="block text-[10px] font-normal text-amber-700">{status}</span>}</td>
+            <td title={`${quantityLabel(item.quantity!)}주`}>{quantityLabel(item.quantity!)}주</td>
+            <td title={investmentMoney(item.investedPrincipal, currency)}>{investmentMoney(item.investedPrincipal, currency)}</td>
+            <td title={investmentMoney(item.purchasePrice!, currency)}>{investmentMoney(item.purchasePrice!, currency)}</td>
+            <td className={`font-semibold ${profitColor(rate)}`}>{percentLabel(rate)}</td>
+          </tr>;
+        })}</tbody>
+      </table>
     </div>
-    <div className="mt-2"><p className="text-[10px] text-slate-500">평가금액</p><div className="flex flex-wrap items-baseline justify-between gap-x-2"><p className="break-all text-sm font-bold leading-tight">{investmentMoney(investment.currentValuation, investment.currency!)}</p><p className={`text-xs font-bold ${profitColor(rate)}`}>{percentLabel(rate)}</p></div></div>
-    <div className="mt-2 flex flex-wrap justify-between gap-x-2 gap-y-0.5 border-t border-slate-100 pt-2 text-[11px] leading-tight"><span className="text-slate-500">매수 {investmentMoney(investment.investedPrincipal, investment.currency!)}</span><span className={profitColor(change)}>전월 {change === null ? '—' : <>{percentLabel(change, '%p')} {change > 0 ? <ArrowUpRight className="inline" size={12}/> : change < 0 ? <ArrowDownRight className="inline" size={12}/> : null}</>}</span></div>
-    <details className="mt-2 border-t border-slate-100 pt-1.5 text-[11px] text-slate-500"><summary className="cursor-pointer select-none">거래·시세 상세</summary><div className="mt-2 space-y-1 leading-relaxed"><p>보유 {new Intl.NumberFormat('ko-KR', {maximumFractionDigits: 8}).format(investment.quantity!)}주 · 평균 매수가 {investmentMoney(investment.purchasePrice!, investment.currency!)}</p><p>현재가 {investment.lastPrice ? investmentMoney(investment.lastPrice, investment.currency!) : '시세 대기'}</p><p>{investment.valuationSource === 'principal' ? '시세 미확인 · 평가금액은 입력 원금으로 임시 표시합니다.' : `시세 기준 ${timestampLabel(investment.quoteTime)} · 조회 ${timestampLabel(investment.fetchedAt)}`}{notUpdated ? ' · 갱신 실패, 저장값 유지' : ''}</p></div></details>
-    {(notUpdated || investment.valuationSource === 'principal') && <p className="mt-1.5 text-[10px] text-amber-700">{notUpdated ? '시세 갱신 실패 · 저장값 유지' : '시세 미확인 · 원금 임시 표시'}</p>}
-  </article>;
+    {scroll.overflow && <div className="flex items-center gap-3 border-t border-[#eaf4fb] px-3 py-1.5 text-[11px] text-[#647784]">
+      <span className="shrink-0">좌우로 밀어 확인하세요</span>
+      <div aria-hidden="true" className="portfolio-scroll-track"><span className="portfolio-scroll-thumb" style={{width: `${Math.max(14, scroll.thumb * 100)}%`, left: `${scroll.progress * (100 - Math.max(14, scroll.thumb * 100))}%`}}/></div>
+      <div className="flex gap-1"><button type="button" aria-label="표 왼쪽으로 이동" disabled={scroll.start} onClick={() => move(-1)} className="portfolio-scroll-button"><ArrowLeft size={16}/></button><button type="button" aria-label="표 오른쪽으로 이동" disabled={scroll.end} onClick={() => move(1)} className="portfolio-scroll-button"><ArrowRight size={16}/></button></div>
+    </div>}
+  </div>;
+}
+
+function HoldingDetails({investment, investments, notUpdated, historic, onClose, onEdit}: {
+  investment: InvestmentMonthly; investments: InvestmentMonthly[]; notUpdated: boolean; historic: boolean; onClose: () => void; onEdit: () => void;
+}) {
+  const currency = investment.currency!;
+  const category = useAppStore(s => s.budgetCodes).find(code => code.codeId === investment.codeId)?.categoryName;
+  const change = previousMonthChange(investment, investments);
+  return <Dialog title="종목 상세" onClose={onClose} className="portfolio-detail-dialog">
+    <div className="mt-3"><h3 className="text-base font-bold">{investment.tickerName}</h3><p className="mt-1 text-xs text-[#647784]">{investment.ticker} · {currency}{category ? ` · ${category}` : ''}</p></div>
+    <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-y border-[#eaf4fb] py-4 text-sm">
+      <div><dt className="text-xs text-[#8a9ba6]">평가금액</dt><dd className="mt-1 font-semibold">{investmentMoney(investment.currentValuation,currency)}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">수익률</dt><dd className={`mt-1 font-semibold ${profitColor(returnRate(investment))}`}>{percentLabel(returnRate(investment))}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">매수 원금</dt><dd className="mt-1 font-semibold">{investmentMoney(investment.investedPrincipal,currency)}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">수량</dt><dd className="mt-1 font-semibold">{quantityLabel(investment.quantity!)}주</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">평균 매수 단가</dt><dd className="mt-1 font-semibold">{investmentMoney(investment.purchasePrice!,currency)}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">현재가</dt><dd className="mt-1 font-semibold">{investment.lastPrice ? investmentMoney(investment.lastPrice,currency) : '시세 대기'}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">전월 대비</dt><dd className={`mt-1 font-semibold ${profitColor(change)}`}>{percentLabel(change,'%p')}</dd></div>
+    </dl>
+    <div className="mt-4 space-y-1 text-xs leading-5 text-[#647784]"><p>시세 기준 {timestampLabel(investment.quoteTime)}</p><p>마지막 조회 {timestampLabel(investment.fetchedAt)}</p>
+      {investment.valuationSource === 'principal' && <p className="text-amber-700">시세를 확인하지 못해 입력 원금을 평가금액으로 임시 표시합니다.</p>}
+      {notUpdated && <p className="text-amber-700">시세 갱신에 실패해 저장된 평가금액을 유지했습니다.</p>}
+    </div>
+    {!historic && <button type="button" className="button-primary mt-5 w-full" onClick={onEdit}><Pencil size={15}/>종목 수정</button>}
+  </Dialog>;
 }
 
 export default function InvestmentTab() {
@@ -137,12 +206,27 @@ export default function InvestmentTab() {
   const currentMonth = todayDate().slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
   const [editing, setEditing] = useState<InvestmentMonthly | null | undefined>(undefined);
+  const [market, setMarket] = useState<'KRW' | 'USD'>(() => {
+    const records = useAppStore.getState().investments.filter(i => isTracked(i) && i.yearMonth <= currentMonth);
+    if (records.some(i => i.yearMonth === currentMonth && i.currency === 'KRW')) return 'KRW';
+    if (records.some(i => i.yearMonth === currentMonth && i.currency === 'USD')) return 'USD';
+    return records.sort((a, b) => b.yearMonth.localeCompare(a.yearMonth))[0]?.currency === 'USD' ? 'USD' : 'KRW';
+  });
+  const [page, setPage] = useState(0);
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fxLoading, setFxLoading] = useState(false);
   const [fxQuote, setFxQuote] = useState<MarketQuote | null>(null);
   const [fxError, setFxError] = useState(false);
   const [message, setMessage] = useState('');
   const [failed, setFailed] = useState<string[]>([]);
+  useEffect(() => {
+    if (!message || message.includes('실패') || message.includes('유지')) return;
+    const timer = setTimeout(() => setMessage(''), 4000);
+    return () => clearTimeout(timer);
+  }, [message]);
   const run = useRef(0);
   const fxRun = useRef(0);
   const currentSignature = investments.filter(i => i.yearMonth === currentMonth && isTracked(i)).map(i => i.ticker).sort().join(',');
@@ -197,6 +281,12 @@ export default function InvestmentTab() {
   const legacy = monthly.filter(i => !isTracked(i));
   const domestic = tracked.filter(i => i.currency === 'KRW');
   const overseas = tracked.filter(i => i.currency === 'USD');
+  const selectedRecords = market === 'KRW' ? domestic : overseas;
+  const selectedTotals = summarizeCurrency(selectedRecords);
+  const pageCount = Math.max(1, Math.ceil(selectedRecords.length / PAGE_SIZE));
+  const visiblePage = Math.min(page, pageCount - 1);
+  const visibleRecords = selectedRecords.slice(visiblePage * PAGE_SIZE, (visiblePage + 1) * PAGE_SIZE);
+  const details = tracked.find(item => item.invId === detailsId);
   const previous = investments.filter(i => i.yearMonth === previousMonth && isTracked(i));
   const currentTotals = summarizePortfolio(tracked, fxQuote?.price ?? null);
   const priorTotals = summarizePortfolio(previous, fxQuote?.price ?? null);
@@ -206,44 +296,56 @@ export default function InvestmentTab() {
   const historic = month !== currentMonth;
   const moneyOrDash = (amount: number | null) => amount === null ? '—' : investmentMoney(amount, 'KRW');
   const deltaLabel = (amount: number | null, unit: '%' | '%p' = '%') => amount === null ? '비교 기록 없음' : unit === '%p' ? percentLabel(amount, '%p') : `${amount > 0 ? '+' : amount < 0 ? '−' : ''}${investmentMoney(Math.abs(amount), 'KRW')}`;
+  const selectMarket = (next: 'KRW' | 'USD') => {setMarket(next);setPage(0);setDetailsId(null);};
+  const selectMonth = (next: string) => {setMonth(next);setPage(0);setDetailsId(null);};
   return <>
     <div className="eyebrow">포트폴리오</div>
-    <div className="mt-3 flex flex-wrap items-center justify-between gap-4">
-      <div><h1>투자 포트폴리오</h1><p className="muted mt-2 text-sm">보유 종목의 평가금액과 수익률을 확인해요.</p></div>
-      <button className="button-primary" onClick={() => setEditing(null)}><Plus size={16}/>종목 추가</button>
+    <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+      <h1>투자 포트폴리오</h1>
+      <button type="button" className="button-primary" onClick={() => setEditing(null)}><Plus size={16}/>종목 추가</button>
     </div>
-    <div className="mt-7 flex flex-wrap items-center justify-between gap-3">
-      <label className="text-xs text-slate-500">조회 월 <input className="month-picker" aria-label="투자 조회 월" type="month" max={currentMonth} value={month} onChange={event => {if (isValidMonth(event.target.value) && event.target.value <= currentMonth) setMonth(event.target.value);}}/></label>
-      <div className="flex items-center gap-2"><button className="text-button" onClick={() => setMonth(currentMonth)}>이번 달</button><button className="button-secondary disabled:opacity-50" disabled={loading || fxLoading || historic || !tracked.length} onClick={() => {void refresh(true);void refreshFx(true);}}><RefreshCw size={15} className={loading || fxLoading ? 'animate-spin' : ''}/>{loading || fxLoading ? '조회 중' : '시세 새로고침'}</button></div>
+    <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2"><label className="text-xs text-[#647784]">조회 월 <input className="month-picker" aria-label="투자 조회 월" type="month" max={currentMonth} value={month} onChange={event => {if (isValidMonth(event.target.value) && event.target.value <= currentMonth) selectMonth(event.target.value);}}/></label><button type="button" className="text-button" onClick={() => selectMonth(currentMonth)}>이번 달</button></div>
+      <div className="flex items-center gap-2"><button type="button" className="button-secondary disabled:opacity-50" disabled={loading || fxLoading || historic || !tracked.length} onClick={() => {void refresh(true);void refreshFx(true);}}><RefreshCw size={15} className={loading || fxLoading ? 'animate-spin' : ''}/>{loading || fxLoading ? '조회 중' : '시세 새로고침'}</button><button type="button" className="text-button !text-xs" onClick={() => setShowHelp(true)}><Info size={15}/>계산 기준</button></div>
     </div>
-    <div className="mt-5 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold">전체 자산 · 원화</h2><span className="text-xs text-slate-500">국내 + 해외 {tracked.length}개 종목</span></div>
-    <div className="summary-grid mt-3 grid sm:grid-cols-3">
-      <article className="card flex items-center justify-between gap-2 !px-3 !py-2.5 sm:block sm:!p-4"><div><p className="text-xs text-slate-500">총 매수 원금</p><p className="text-[11px] text-slate-400">전월 {previous.length ? moneyOrDash(priorTotals.principal) : '기록 없음'}</p></div><div className="min-w-0 text-right sm:mt-2 sm:text-left"><p className="break-all text-base font-bold leading-tight sm:text-lg">{moneyOrDash(currentTotals.principal)}</p><p className="text-[11px] text-slate-500">대비 <span className="text-slate-700">{deltaLabel(costChange)}</span></p></div></article>
-      <article className="card flex items-center justify-between gap-2 !px-3 !py-2.5 sm:block sm:!p-4"><div><p className="text-xs text-slate-500">현재 총 평가금액</p><p className="text-[11px] text-slate-400">전월 {previous.length ? moneyOrDash(priorTotals.valuation) : '기록 없음'}</p></div><div className="min-w-0 text-right sm:mt-2 sm:text-left"><p className="break-all text-base font-bold leading-tight sm:text-lg">{moneyOrDash(currentTotals.valuation)}</p><p className="text-[11px] text-slate-500">대비 <span className="text-slate-700">{deltaLabel(valueChange)}</span></p></div></article>
-      <article className="card flex items-center justify-between gap-2 !px-3 !py-2.5 sm:block sm:!p-4"><div><p className="text-xs text-slate-500">총 누적 수익률</p><p className="text-[11px] text-slate-400">전월 {previous.length ? percentLabel(priorTotals.returnRate) : '기록 없음'}</p></div><div className="min-w-0 text-right sm:mt-2 sm:text-left"><p className={`text-base font-bold leading-tight sm:text-lg ${profitColor(currentTotals.returnRate)}`}>{percentLabel(currentTotals.returnRate)}</p><p className="text-[11px] text-slate-500">대비 <span className={profitColor(rateChange)}>{deltaLabel(rateChange, '%p')}</span></p></div></article>
-    </div>
-    <div className="mt-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-xs leading-relaxed text-slate-600" role="status" aria-live="polite">
-      {needsFx ? fxQuote ? <>적용 환율 1 USD = {investmentMoney(fxQuote.price, 'KRW')} · 시세 기준 {timestampLabel(fxQuote.marketTime)}{fxError ? ' · 갱신 실패, 마지막 확인 환율 사용' : ''}</> : fxLoading ? 'USD/KRW 환율을 조회하고 있어요…' : '환율을 조회하지 못해 원화 합계를 표시할 수 없어요.' : '달러 보유 종목이 없어 환율 환산이 필요하지 않아요.'}
-      {needsFx && fxError && !fxLoading && <button type="button" className="ml-2 font-semibold text-forest underline" onClick={() => void refreshFx(true)}>환율 다시 조회</button>}
-      {needsFx && <span className="block mt-1 text-slate-500">환율 출처: <a className="underline" href="https://finance.yahoo.com/quote/KRW%3DX/" target="_blank" rel="noopener noreferrer">Yahoo Finance USD/KRW</a> · 지연 시세일 수 있어요.</span>}
-      {currentTotals.unpriced > 0 && <span className="block mt-1 text-amber-700">시세 미확인 {currentTotals.unpriced}개 종목은 원금으로 임시 표시하며 총 수익률 계산에서 제외해요.</span>}
-      <span className="block mt-1 text-slate-500">전월 비교는 두 달 모두 위의 동일한 환율로 환산한 월별 저장값의 차이예요. 종목 추가·수정은 금액 차이에 포함되며, 매수 당시 환율·환차손익은 반영하지 않아요.</span>
-    </div>
-    <div role="status" aria-live="polite" className="mt-4 min-h-5 text-xs text-forest">{message}</div>
-    {historic && <p className="mt-2 rounded-lg bg-slate-100 p-3 text-xs text-slate-500">과거 월의 저장 기록입니다. 오늘의 시세로 과거 기록을 변경하지 않아요.</p>}
-    <section className="mt-7 space-y-7" aria-label="보유 투자 종목">
-      {(['KRW', 'USD'] as const).map(groupCurrency => {
-        const records = groupCurrency === 'KRW' ? domestic : overseas;
-        const totals = summarizeCurrency(records);
-        return <section key={groupCurrency} aria-label={groupCurrency === 'KRW' ? '국내 주식' : '해외 주식'}>
-          <div className="flex items-baseline justify-between gap-3"><h2 className="text-base font-bold">{groupCurrency === 'KRW' ? '국내 주식' : '해외 주식'}</h2><span className="text-xs text-slate-500">{records.length}개 · {groupCurrency}</span></div>
-          {records.length > 0 && <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 rounded-lg bg-[#f2f7fb] px-4 py-3 text-xs text-slate-700"><span>매수 <strong>{investmentMoney(totals.principal!, groupCurrency)}</strong></span><span>평가 <strong>{investmentMoney(totals.valuation!, groupCurrency)}</strong></span><span>수익률 <strong className={profitColor(totals.returnRate)}>{percentLabel(totals.returnRate)}</strong></span></div>}
-          {records.length ? <div className="mt-3 grid grid-cols-2 items-start gap-2.5">{records.map(investment => <StockCard key={investment.invId} investment={investment} investments={investments} historic={historic} notUpdated={!historic && failed.includes(investment.ticker!)} onEdit={() => setEditing(investment)}/>)}</div> : <p className="mt-3 rounded-lg border border-dashed border-slate-200 px-4 py-5 text-xs text-slate-500">이 달의 {groupCurrency === 'KRW' ? '국내' : '해외'} 보유 종목이 없어요.</p>}
-        </section>;
-      })}
+    <div className="mt-5 flex items-center justify-between gap-3"><h2 className="text-sm font-bold">전체 자산 · 원화</h2><button type="button" className="text-button !text-xs" onClick={() => setShowSummary(true)}>전월 상세</button></div>
+    <section aria-label="전체 자산 요약" className="portfolio-summary mt-2">
+      <article className="portfolio-summary-cost"><p className="portfolio-summary-label">총 매수 원금</p><p className="portfolio-summary-number">{moneyOrDash(currentTotals.principal)}</p><p className="portfolio-summary-delta">전월 대비 {deltaLabel(costChange)}</p></article>
+      <article className="portfolio-summary-value"><p className="portfolio-summary-label">현재 총 평가금액</p><p className="portfolio-summary-number">{moneyOrDash(currentTotals.valuation)}</p><p className="portfolio-summary-delta">전월 대비 {deltaLabel(valueChange)}</p></article>
+      <article className="portfolio-summary-rate"><p className="portfolio-summary-label">총 누적 수익률</p><p className={`portfolio-summary-number ${profitColor(currentTotals.returnRate)}`}>{percentLabel(currentTotals.returnRate)}</p><p className={`portfolio-summary-delta ${profitColor(rateChange)}`}>전월 대비 {deltaLabel(rateChange, '%p')}</p></article>
     </section>
-    {legacy.length > 0 && <section className="card mt-5"><h2 className="text-sm font-bold">기존 투자 기록</h2><p className="mt-2 text-xs text-slate-500">티커·통화·수량이 없는 이전 기록은 자동 조회 및 통화별 합산에서 제외했어요.</p>{legacy.map(item => <p key={item.invId} className="mt-3 text-sm">{item.tickerName} · 저장 평가금액 {item.currentValuation.toLocaleString('ko-KR')} (통화 미지정)</p>)}</section>}
-    <p className="mt-6 text-xs leading-relaxed text-slate-400">Yahoo Finance 정규장 최신 제공 시세이며 지연될 수 있어요. 휴장일에는 마지막 거래 시세가 표시됩니다. 전월 대비는 직전 달에 마지막으로 저장한 수익률과의 차이(%p)예요.</p>
-    {editing !== undefined && <InvestmentForm investment={editing} onClose={() => setEditing(undefined)} onSaved={(notice, ticker, quoted) => {if (quoted) setFailed(items => items.filter(item => item !== ticker));setMonth(todayDate().slice(0, 7));setEditing(undefined);setMessage(notice);}}/>}
+    <div className="mt-2 text-xs leading-5 text-[#647784]" role="status" aria-live="polite">
+      {needsFx && (fxQuote ? <>적용 환율 1 USD = {investmentMoney(fxQuote.price, 'KRW')} · {timestampLabel(fxQuote.marketTime)}{fxError ? ' · 마지막 확인 환율 사용' : ''}</> : fxLoading ? 'USD/KRW 환율을 조회하고 있어요…' : '환율을 조회하지 못해 원화 합계를 표시할 수 없어요.')}
+      {needsFx && fxError && !fxLoading && <button type="button" className="ml-2 font-semibold text-[#176897] underline" onClick={() => void refreshFx(true)}>환율 다시 조회</button>}
+      {currentTotals.unpriced > 0 && <p className="text-amber-700">시세 미확인 {currentTotals.unpriced}개 종목은 원금으로 임시 표시하고 총 수익률에서 제외해요.</p>}
+      {historic && <p>과거 월의 저장 기록입니다.</p>}
+    </div>
+    {message && <p role="status" aria-live="polite" className="mt-2 text-xs text-[#526b7b]">{message}</p>}
+    <section className="mt-6 min-w-0" aria-label="보유 투자 종목">
+      <div role="tablist" aria-label="투자 시장" className="flex gap-5 border-b border-[#dce7ee]">
+        {(['KRW','USD'] as const).map(currency => <button key={currency} type="button" role="tab" id={`portfolio-tab-${currency}`} aria-selected={market === currency} aria-controls="portfolio-market-panel" onClick={() => selectMarket(currency)} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold ${market === currency ? 'border-[#176897] text-[#176897]' : 'border-transparent text-[#8a9ba6]'}`}>{currency === 'KRW' ? '국내 주식' : '해외 주식'} <span className="font-normal">{currency === 'KRW' ? domestic.length : overseas.length}</span></button>)}
+      </div>
+      <div id="portfolio-market-panel" role="tabpanel" aria-labelledby={`portfolio-tab-${market}`} className="min-w-0 pt-3">
+        {selectedRecords.length > 0 ? <>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-[#526b7b]"><span>매수 <strong className="text-[#27343e]">{investmentMoney(selectedTotals.principal!, market)}</strong></span><span>평가 <strong className="text-[#27343e]">{investmentMoney(selectedTotals.valuation!, market)}</strong></span><span>수익률 <strong className={profitColor(selectedTotals.returnRate)}>{percentLabel(selectedTotals.returnRate)}</strong></span></div>
+          <HoldingsTable key={`${month}-${market}-${visiblePage}`} records={visibleRecords} currency={market} onDetails={setDetailsId}/>
+          {pageCount > 1 && <nav aria-label="종목 페이지" className="mt-3 flex items-center justify-center gap-3 text-xs text-[#647784]"><button type="button" className="button-secondary !min-h-9 !px-3" disabled={visiblePage === 0} onClick={() => setPage(visiblePage - 1)}>이전</button><span>{visiblePage + 1} / {pageCount}</span><button type="button" className="button-secondary !min-h-9 !px-3" disabled={visiblePage === pageCount - 1} onClick={() => setPage(visiblePage + 1)}>다음</button></nav>}
+        </> : <div className="rounded-lg border border-dashed border-[#dce7ee] px-4 py-6 text-center text-sm text-[#647784]"><p>이 달의 {market === 'KRW' ? '국내' : '해외'} 보유 종목이 없어요.</p>{!historic && <button type="button" className="text-button mx-auto mt-3 !text-sm" onClick={() => setEditing(null)}><Plus size={15}/>첫 종목 추가하기</button>}</div>}
+      </div>
+    </section>
+    {legacy.length > 0 && <details className="mt-5 rounded-lg border border-[#eaf4fb] px-4 py-3 text-xs text-[#647784]"><summary className="cursor-pointer font-semibold">기존 투자 기록 {legacy.length}개</summary><p className="mt-2">티커·통화·수량이 없는 기록은 자동 조회와 통화별 합산에서 제외해요.</p>{legacy.map(item => <p key={item.invId} className="mt-2">{item.tickerName} · 저장 평가금액 {item.currentValuation.toLocaleString('ko-KR')} (통화 미지정)</p>)}</details>}
+    {showHelp && <Dialog title="계산 기준" onClose={() => setShowHelp(false)} className="portfolio-detail-dialog"><div className="mt-4 space-y-4 text-sm leading-6 text-[#526b7b]">
+      <p>전체 자산은 국내 종목의 원화 금액과 해외 종목의 달러 금액을 같은 USD/KRW 환율로 환산해 더해요. 환율은 <a className="text-[#176897] underline" href="https://finance.yahoo.com/quote/KRW%3DX/" target="_blank" rel="noopener noreferrer">Yahoo Finance USD/KRW</a>의 지연 시세일 수 있어요.</p>
+      <p>누적 수익률은 평가금액 합계 ÷ 매수 원금 합계 − 1로 계산해요. 시세를 확인하지 못한 종목이 있으면 해당 합계의 수익률을 표시하지 않아요.</p>
+      <p>전월 금액은 두 달 모두 현재 적용 환율로 환산한 저장값의 차이예요. 종목 추가·수정도 금액 차이에 포함돼요. 수익률 변화는 퍼센트포인트(%p)로 표시해요.</p>
+      <p>배당·세금·매수 당시 환율과 환차손익은 수익률에 반영하지 않아요. 휴장일에는 마지막 거래 시세가 표시될 수 있어요.</p>
+    </div></Dialog>}
+    {showSummary && <Dialog title="전월 비교 상세" onClose={() => setShowSummary(false)} className="portfolio-detail-dialog"><dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+      <div><dt className="text-xs text-[#8a9ba6]">이번 달 매수 원금</dt><dd className="mt-1 font-semibold">{moneyOrDash(currentTotals.principal)}</dd></div><div><dt className="text-xs text-[#8a9ba6]">전월 매수 원금</dt><dd className="mt-1 font-semibold">{previous.length ? moneyOrDash(priorTotals.principal) : '기록 없음'}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">이번 달 평가금액</dt><dd className="mt-1 font-semibold">{moneyOrDash(currentTotals.valuation)}</dd></div><div><dt className="text-xs text-[#8a9ba6]">전월 평가금액</dt><dd className="mt-1 font-semibold">{previous.length ? moneyOrDash(priorTotals.valuation) : '기록 없음'}</dd></div>
+      <div><dt className="text-xs text-[#8a9ba6]">이번 달 수익률</dt><dd className={`mt-1 font-semibold ${profitColor(currentTotals.returnRate)}`}>{percentLabel(currentTotals.returnRate)}</dd></div><div><dt className="text-xs text-[#8a9ba6]">전월 수익률</dt><dd className="mt-1 font-semibold">{previous.length ? percentLabel(priorTotals.returnRate) : '기록 없음'}</dd></div>
+    </dl><p className="mt-4 text-xs leading-5 text-[#647784]">종목 추가·수정은 금액 차이에 포함돼요. 두 달의 달러 금액은 같은 환율로 비교합니다.</p></Dialog>}
+    {details && <HoldingDetails investment={details} investments={investments} notUpdated={!historic && failed.includes(details.ticker!)} historic={historic} onClose={() => setDetailsId(null)} onEdit={() => {setDetailsId(null);setEditing(details);}}/>}
+    {editing !== undefined && <InvestmentForm investment={editing} onClose={() => setEditing(undefined)} onSaved={(notice, ticker, quoted) => {if (quoted) setFailed(items => items.filter(item => item !== ticker));selectMonth(todayDate().slice(0, 7));const currency = stocks.find(item => item.ticker === ticker)?.currency;if (currency) selectMarket(currency);setEditing(undefined);setMessage(notice);}}/>}
   </>;
 }

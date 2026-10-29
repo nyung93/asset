@@ -34,6 +34,9 @@
    환경값을 가진 로컬 환경에서 `ADMIN_BOOTSTRAP_PASSWORD`를 일시적으로 설정한 뒤
    `npm run accounts:create-admin`으로 한 번만 만듭니다. 이 명령은 `admin`이 이미
    있으면 덮어쓰지 않습니다. 실행 후 부트스트랩 비밀번호를 환경에서 제거하세요.
+   기존 `admin` 계정의 비밀번호를 변경하거나 계정이 없을 때 생성하려면
+   `npm run accounts:ensure-admin`을 사용합니다. 이 명령은 기존 계정이 실제
+   관리자일 때만 비밀번호를 바꾸며 이전 관리자 로그인 세션도 종료합니다.
    기존 사용자에게 관리자 권한을 부여할 때만
    `npm run admin:grant -- <아이디>`를 사용합니다.
 

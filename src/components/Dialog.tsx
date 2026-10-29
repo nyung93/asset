@@ -4,8 +4,14 @@ export default function Dialog({title, onClose, children, className = ''}: {titl
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current!;
+    const opener = document.activeElement;
     dialog.showModal();
-    return () => dialog.close();
+    return () => {
+      dialog.close();
+      queueMicrotask(() => {
+        if (!document.querySelector('dialog[open]') && opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      });
+    };
   }, []);
   return <dialog ref={ref} aria-label={title} onCancel={event => {event.preventDefault();event.stopPropagation();onClose();}} className={`modal max-h-[90dvh] overflow-y-auto ${className}`}>
     <div className="flex items-center justify-between gap-3">
