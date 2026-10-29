@@ -89,9 +89,9 @@ function newToken() {
 
 // server/gemini.ts
 var GeminiRequestError = class extends Error {
-  constructor(status, code, message) {
+  constructor(status2, code, message) {
     super(message);
-    this.status = status;
+    this.status = status2;
     this.code = code;
   }
   status;
@@ -371,19 +371,20 @@ async function financeQuote(req) {
 }
 
 // server/handler.ts
+var REMEMBER_SECONDS = 7 * 86400;
 var ApiError = class extends Error {
-  constructor(status, message, code = "request_failed") {
+  constructor(status2, message, code = "request_failed") {
     super(message);
-    this.status = status;
+    this.status = status2;
     this.code = code;
   }
   status;
   code;
 };
-function response(data, status = 200, cookies = []) {
+function response(data, status2 = 200, cookies = []) {
   const headers = new Headers({ "Cache-Control": "no-store", "Content-Type": "application/json; charset=utf-8", "X-Content-Type-Options": "nosniff" });
   cookies.forEach((cookie2) => headers.append("Set-Cookie", cookie2));
-  return new Response(JSON.stringify(data), { status, headers });
+  return new Response(JSON.stringify(data), { status: status2, headers });
 }
 function cookie(req, name, value, maxAge) {
   const secure = process.env.VERCEL === "1" || new URL(req.url).protocol === "https:" ? "; Secure" : "";
@@ -468,6 +469,9 @@ async function auth(req) {
 function adminOnly(state) {
   if (state.primary.role !== "ADMIN" || state.impersonationId) throw new ApiError(403, "\uAD00\uB9AC\uC790 \uAD8C\uD55C\uC774 \uD544\uC694\uD574\uC694.", "forbidden");
 }
+function requireAccount(state, expectedId) {
+  if (expectedId !== state.effective.id) throw new ApiError(409, "\uB85C\uADF8\uC778 \uACC4\uC815\uC774 \uBCC0\uACBD\uB410\uC5B4\uC694. \uB2E4\uC2DC \uB85C\uADF8\uC778\uD574 \uC8FC\uC138\uC694.", "account_changed");
+}
 async function createSession(userId, actorAdminId) {
   const token = newToken();
   const now = /* @__PURE__ */ new Date();
@@ -479,6 +483,87 @@ async function createSession(userId, actorAdminId) {
     last_seen_at: now.toISOString()
   });
   return token;
+}
+async function createRememberToken(userId) {
+  const token = newToken(), now = /* @__PURE__ */ new Date();
+  await database().collection("remember_tokens").doc(tokenHash(token)).create({
+    user_id: userId,
+    created_at: now.toISOString(),
+    expires_at: new Date(now.getTime() + REMEMBER_SECONDS * 1e3).toISOString()
+  });
+  return token;
+}
+async function revokeRememberToken(req) {
+  const token = readCookie(req, "rgt_remember");
+  if (token && /^[A-Za-z0-9_-]{43}$/.test(token)) await database().collection("remember_tokens").doc(tokenHash(token)).delete();
+}
+async function hasRememberToken(req, userId) {
+  const token = readCookie(req, "rgt_remember");
+  if (!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const ref = database().collection("remember_tokens").doc(tokenHash(token));
+  const found = await ref.get();
+  if (!found.exists) return false;
+  const row = found.data();
+  if (row.expires_at <= (/* @__PURE__ */ new Date()).toISOString()) {
+    await ref.delete();
+    return false;
+  }
+  return row.user_id === userId;
+}
+async function renewFromRemember(req) {
+  const oldToken = readCookie(req, "rgt_remember");
+  if (!oldToken || !/^[A-Za-z0-9_-]{43}$/.test(oldToken)) return null;
+  const freshToken = newToken(), now = /* @__PURE__ */ new Date();
+  const oldRef = database().collection("remember_tokens").doc(tokenHash(oldToken));
+  const freshRef = database().collection("remember_tokens").doc(tokenHash(freshToken));
+  const renewed = await database().runTransaction(async (transaction) => {
+    const found = await transaction.get(oldRef);
+    if (!found.exists) return null;
+    const row = found.data();
+    if (row.expires_at <= now.toISOString()) {
+      transaction.delete(oldRef);
+      return null;
+    }
+    const account = await transaction.get(database().collection("users").doc(row.user_id));
+    if (!account.exists) {
+      transaction.delete(oldRef);
+      return null;
+    }
+    const user = account.data();
+    if (user.role !== "USER") {
+      transaction.delete(oldRef);
+      return null;
+    }
+    const remainingSeconds = Math.max(1, Math.ceil((Date.parse(row.expires_at) - now.getTime()) / 1e3));
+    transaction.delete(oldRef);
+    transaction.create(freshRef, { user_id: user.id, created_at: now.toISOString(), expires_at: row.expires_at });
+    return { user, remainingSeconds };
+  });
+  if (!renewed) return null;
+  const token = await createSession(renewed.user.id);
+  return response({ user: publicUser(renewed.user), impersonating: false, remembered: true }, 200, [
+    cookie(req, "rgt_session", token),
+    cookie(req, "rgt_remember", freshToken, renewed.remainingSeconds),
+    cookie(req, "rgt_impersonation", "", 0)
+  ]);
+}
+async function status(req) {
+  let state;
+  try {
+    state = await auth(req);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
+    const restored = await renewFromRemember(req);
+    if (restored) return restored;
+    throw error;
+  }
+  const remembered = await hasRememberToken(req, state.primary.id);
+  return response({
+    user: publicUser(state.effective),
+    impersonating: !!state.impersonationId,
+    adminName: state.impersonationId ? state.primary.name : void 0,
+    remembered
+  });
 }
 async function register(req, input) {
   const name = string(input.name, 40).trim();
@@ -514,8 +599,9 @@ async function register(req, input) {
     if (error.code === 6) throw new ApiError(409, "\uC774\uBBF8 \uC0AC\uC6A9 \uC911\uC778 \uC544\uC774\uB514\uC608\uC694.", "duplicate_username");
     throw error;
   }
+  await revokeRememberToken(req);
   const token = await createSession(id);
-  return response({ user: publicUser(row), impersonating: false }, 201, [cookie(req, "rgt_session", token)]);
+  return response({ user: publicUser(row), impersonating: false, remembered: false }, 201, [cookie(req, "rgt_session", token), cookie(req, "rgt_remember", "", 0)]);
 }
 var dummyHash;
 async function login(req, input) {
@@ -555,16 +641,25 @@ async function login(req, input) {
   await attemptRef.delete();
   user.last_login_at = (/* @__PURE__ */ new Date()).toISOString();
   await database().collection("users").doc(user.id).update({ last_login_at: user.last_login_at });
+  await revokeRememberToken(req);
+  const remembered = input.remember === true && user.role === "USER";
   const token = await createSession(user.id);
-  return response({ user: publicUser(user), impersonating: false }, 200, [cookie(req, "rgt_session", token), cookie(req, "rgt_impersonation", "", 0)]);
+  const rememberToken = remembered ? await createRememberToken(user.id) : null;
+  return response({ user: publicUser(user), impersonating: false, remembered }, 200, [
+    cookie(req, "rgt_session", token),
+    cookie(req, "rgt_impersonation", "", 0),
+    rememberToken ? cookie(req, "rgt_remember", rememberToken, REMEMBER_SECONDS) : cookie(req, "rgt_remember", "", 0)
+  ]);
 }
 async function logout(req) {
   const primary = readCookie(req, "rgt_session"), impersonated = readCookie(req, "rgt_impersonation");
   if (primary) await database().collection("sessions").doc(tokenHash(primary)).delete();
   if (impersonated) await database().collection("sessions").doc(tokenHash(impersonated)).delete();
-  return response({ ok: true }, 200, [cookie(req, "rgt_session", "", 0), cookie(req, "rgt_impersonation", "", 0)]);
+  await revokeRememberToken(req);
+  return response({ ok: true }, 200, [cookie(req, "rgt_session", "", 0), cookie(req, "rgt_impersonation", "", 0), cookie(req, "rgt_remember", "", 0)]);
 }
-async function updateProfile(state, input) {
+async function updateProfile(req, state, input) {
+  requireAccount(state, input.userId);
   const birthDate = string(input.birthDate, 10), phone = validPhone(string(input.phone, 30));
   if (!validBirthDate(birthDate)) throw new ApiError(400, "\uC0DD\uB144\uC6D4\uC77C\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
   const nextPassword = string(input.newPassword, 128);
@@ -582,7 +677,11 @@ async function updateProfile(state, input) {
   };
   await database().collection("users").doc(state.effective.id).update(updates);
   if (state.impersonationId) await audit(state.primary.id, state.effective.id, "PROFILE_UPDATE");
-  return response({ user: publicUser({ ...state.effective, ...updates }), impersonating: !!state.impersonationId });
+  return response({
+    user: publicUser({ ...state.effective, ...updates }),
+    impersonating: !!state.impersonationId,
+    remembered: await hasRememberToken(req, state.primary.id)
+  });
 }
 function appData(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw new ApiError(400, "\uC800\uC7A5\uD560 \uB370\uC774\uD130\uAC00 \uC62C\uBC14\uB974\uC9C0 \uC54A\uC544\uC694.");
@@ -596,11 +695,13 @@ function metrics(data) {
   const character = data.character;
   return [transactions.length, total("EXPENSE"), total("SAVING"), Number.isSafeInteger(character.totalXp) ? character.totalXp : 0];
 }
-async function getData(state) {
+async function getData(req, state) {
+  requireAccount(state, new URL(req.url).searchParams.get("userId"));
   const row = (await database().collection("app_data").doc(state.effective.id).get()).data();
   return response({ data: row ? JSON.parse(decryptField(row.data_cipher)) : null, version: row?.version ?? 0 });
 }
 async function saveData(state, input) {
+  requireAccount(state, input.userId);
   const data = appData(input.data);
   const version = input.version;
   if (!Number.isSafeInteger(version) || Number(version) < 0) throw new ApiError(400, "\uB370\uC774\uD130 \uBC84\uC804\uC744 \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
@@ -686,13 +787,13 @@ async function impersonate(req, state, input) {
   if (target.role !== "USER") throw new ApiError(404, "\uC811\uC18D\uD560 \uD68C\uC6D0\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC5B4\uC694.");
   const token = await createSession(target.id, state.primary.id);
   await audit(state.primary.id, target.id, "IMPERSONATION_START");
-  return response({ user: publicUser(target), impersonating: true, adminName: state.primary.name }, 200, [cookie(req, "rgt_impersonation", token)]);
+  return response({ user: publicUser(target), impersonating: true, adminName: state.primary.name, remembered: false }, 200, [cookie(req, "rgt_impersonation", token)]);
 }
 async function stopImpersonation(req, state) {
   if (!state.impersonationId) throw new ApiError(400, "\uD68C\uC6D0 \uACC4\uC815 \uC811\uC18D \uC911\uC774 \uC544\uB2C8\uC5D0\uC694.");
   await audit(state.primary.id, state.effective.id, "IMPERSONATION_STOP");
   await database().collection("sessions").doc(state.impersonationId).delete();
-  return response({ user: publicUser(state.primary), impersonating: false }, 200, [cookie(req, "rgt_impersonation", "", 0)]);
+  return response({ user: publicUser(state.primary), impersonating: false, remembered: false }, 200, [cookie(req, "rgt_impersonation", "", 0)]);
 }
 async function reserveAiRequest(userId) {
   const day = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
@@ -752,11 +853,11 @@ async function handleRequest(req) {
     if (req.method === "POST" && action === "register") return await register(req, await body(req));
     if (req.method === "POST" && action === "login") return await login(req, await body(req));
     if (req.method === "POST" && action === "logout") return await logout(req);
+    if (req.method === "GET" && action === "status") return await status(req);
     const state = await auth(req);
-    if (req.method === "GET" && action === "status") return response({ user: publicUser(state.effective), impersonating: !!state.impersonationId, adminName: state.impersonationId ? state.primary.name : void 0 });
-    if (req.method === "GET" && action === "data") return await getData(state);
+    if (req.method === "GET" && action === "data") return await getData(req, state);
     if (req.method === "POST" && action === "data") return await saveData(state, await body(req));
-    if (req.method === "POST" && action === "profile") return await updateProfile(state, await body(req));
+    if (req.method === "POST" && action === "profile") return await updateProfile(req, state, await body(req));
     if (req.method === "POST" && action === "stop-impersonation") return await stopImpersonation(req, state);
     if (req.method === "POST" && action === "ai-advice") return await aiAdvice(state, await body(req));
     if (req.method === "POST" && action === "ai-receipt") return await aiReceipt(state, await body(req, 19e5));

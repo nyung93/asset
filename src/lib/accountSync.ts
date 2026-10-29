@@ -14,7 +14,7 @@ export class AccountSync {
   private timer:ReturnType<typeof setTimeout>|null=null;
   private unsubscribe:()=>void;
   error='';
-  constructor(private version:number,private onError:(message:string)=>void) {
+  constructor(private version:number,private userId:string,private onError:(message:string)=>void) {
     this.unsubscribe=useAppStore.subscribe((next,previous)=>{
       if (next.character===previous.character && next.budgetCodes===previous.budgetCodes && next.transactions===previous.transactions && next.goals===previous.goals && next.investments===previous.investments && next.xpLogs===previous.xpLogs) return;
       this.pending=snapshot();
@@ -29,7 +29,7 @@ export class AccountSync {
     const current=this.pending;this.pending=null;
     this.sending=(async()=>{
       try {
-        const result=await accountApi.saveData(current,this.version);
+        const result=await accountApi.saveData(current,this.version,this.userId);
         this.version=result.version;this.error='';this.onError('');
       } catch(error) {
         this.pending ??= current;

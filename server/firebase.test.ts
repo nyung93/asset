@@ -26,13 +26,14 @@ class MemoryFirestore {
     };
   }
   async runTransaction<T>(run:(transaction:{get:(ref:ReturnType<ReturnType<MemoryFirestore['collection']>['doc']>)=>ReturnType<ReturnType<ReturnType<MemoryFirestore['collection']>['doc']>['get']>;
-    create:(ref:{key:string},value:Saved)=>void;set:(ref:{key:string},value:Saved)=>void;update:(ref:{key:string},value:Saved)=>void})=>Promise<T>):Promise<T> {
+    create:(ref:{key:string},value:Saved)=>void;set:(ref:{key:string},value:Saved)=>void;update:(ref:{key:string},value:Saved)=>void;delete:(ref:{key:string})=>void})=>Promise<T>):Promise<T> {
     const writes:Array<()=>void>=[];
     const result=await run({
       get:ref=>ref.get(),
       create:(ref,value)=>writes.push(()=>{if(this.rows.has(ref.key)) throw Object.assign(new Error('Already exists'),{code:6});this.rows.set(ref.key,structuredClone(value));}),
       set:(ref,value)=>writes.push(()=>this.rows.set(ref.key,structuredClone(value))),
       update:(ref,value)=>writes.push(()=>{const prior=this.rows.get(ref.key);if(!prior) throw new Error('Missing document');this.rows.set(ref.key,{...prior,...structuredClone(value)});}),
+      delete:ref=>writes.push(()=>{this.rows.delete(ref.key);}),
     });
     // This fake runs requests sequentially; Firestore handles concurrent retries in production.
     writes.forEach(write=>write());
@@ -41,14 +42,18 @@ class MemoryFirestore {
 }
 
 const origin='https://example.com';
-function request(action:string,method:'GET'|'POST'='GET',input?:object,cookie?:string) {
-  return new Request(`${origin}/api/index?action=${action}`,{method,headers:{
+function request(action:string,method:'GET'|'POST'='GET',input?:object,cookie?:string,userId?:string) {
+  const query=userId && method==='GET' ? `&userId=${encodeURIComponent(userId)}` : '';
+  return new Request(`${origin}/api/index?action=${action}${query}`,{method,headers:{
     ...(method==='POST' ? {origin,'content-type':'application/json'} : {}),
     ...(cookie ? {cookie} : {}),
-  },body:method==='POST' ? JSON.stringify(input ?? {}) : undefined});
+  },body:method==='POST' ? JSON.stringify({...input,...(userId?{userId}:{})}) : undefined});
 }
 function sessionCookie(response:Response) {
   return response.headers.getSetCookie().find(cookie=>cookie.startsWith('rgt_session='))!.split(';')[0];
+}
+function rememberCookie(response:Response) {
+  return response.headers.getSetCookie().find(cookie=>cookie.startsWith('rgt_remember='))!.split(';')[0];
 }
 
 test('Firestore API keeps encrypted accounts, sessions, versioned data and admin access separate',async()=>{
@@ -76,16 +81,16 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     assert.equal(await handleRequest(request('register','POST',input)).then(res=>res.status),409);
     assert.equal(await handleRequest(request('status','GET',undefined,cookie)).then(res=>res.status),200);
 
-    const initial=await handleRequest(request('data','GET',undefined,cookie));
+    const initial=await handleRequest(request('data','GET',undefined,cookie,user.id));
     assert.deepEqual(await initial.json(),{data:null,version:0});
     const data={character:{totalXp:10},budgetCodes:[],transactions:[{type:'EXPENSE',amount:15000}],goals:[],investments:[],xpLogs:[]};
-    const first=await handleRequest(request('data','POST',{data,version:0},cookie));
+    const first=await handleRequest(request('data','POST',{data,version:0},cookie,user.id));
     assert.deepEqual(await first.json(),{version:1});
-    assert.equal(await handleRequest(request('data','POST',{data,version:0},cookie)).then(res=>res.status),409);
-    assert.deepEqual((await handleRequest(request('data','GET',undefined,cookie)).then(res=>res.json())).data,data);
+    assert.equal(await handleRequest(request('data','POST',{data,version:0},cookie,user.id)).then(res=>res.status),409);
+    assert.deepEqual((await handleRequest(request('data','GET',undefined,cookie,user.id)).then(res=>res.json())).data,data);
     assert.notEqual(db.rows.get(`app_data/${user.id}`)?.data_cipher,JSON.stringify(data));
 
-    const profile=await handleRequest(request('profile','POST',{birthDate:'1995-06-01',phone:'010-9876-5432'},cookie));
+    const profile=await handleRequest(request('profile','POST',{birthDate:'1995-06-01',phone:'010-9876-5432'},cookie,user.id));
     assert.equal((await profile.json()).user.phone,'01098765432');
     assert.equal(await handleRequest(request('login','POST',{username:'test1',password:'wrong'})).then(res=>res.status),401);
     const login=await handleRequest(request('login','POST',{username:'test1',password:input.password}));
@@ -122,6 +127,9 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
     db.rows.set(`usernames/${adminLookup}`,{user_id:adminId});
     const adminLogin=await handleRequest(request('login','POST',{username:'admin',password:'Fixture!912'}));
     assert.equal(adminLogin.status,200);
+    const adminRememberAttempt=await handleRequest(request('login','POST',{username:'admin',password:'Fixture!912',remember:true}));
+    assert.equal((await adminRememberAttempt.json()).remembered,false);
+    assert.equal(rememberCookie(adminRememberAttempt),'rgt_remember=');
     const adminCookie=sessionCookie(adminLogin);
     const dashboard=await handleRequest(request('dashboard','GET',undefined,adminCookie));
     assert.equal((await dashboard.json()).users.total_users,2);
@@ -139,8 +147,37 @@ test('Firestore API keeps encrypted accounts, sessions, versioned data and admin
       name:'다른 회원',birthDate:'1996-06-17',phone:'010-2222-3333',username:'otheruser',password:'Other!1234',
     }));
     assert.equal(other.status,201);
-    assert.deepEqual(await handleRequest(request('data','GET',undefined,sessionCookie(other))).then(res=>res.json()),{data:null,version:0});
-    assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(login))).then(res=>res.json())).data,data);
+    const otherId=(await other.clone().json()).user.id;
+    assert.deepEqual(await handleRequest(request('data','GET',undefined,sessionCookie(other),otherId)).then(res=>res.json()),{data:null,version:0});
+    assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(login),user.id)).then(res=>res.json())).data,data);
+    assert.equal(await handleRequest(request('data','GET',undefined,sessionCookie(other),user.id)).then(res=>res.status),409);
+    assert.equal(await handleRequest(request('data','POST',{data,version:0},sessionCookie(other),user.id)).then(res=>res.status),409);
+    assert.equal(await handleRequest(request('profile','POST',{birthDate:'1995-06-01',phone:'010-9876-5432'},sessionCookie(other),user.id)).then(res=>res.status),409);
+    const otherData={...data,transactions:[{type:'SAVING',amount:9999}],character:{totalXp:99}};
+    assert.equal(await handleRequest(request('data','POST',{data:otherData,version:0},sessionCookie(other),otherId)).then(res=>res.status),200);
+    assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(other),otherId)).then(res=>res.json())).data,otherData);
+    assert.deepEqual((await handleRequest(request('data','GET',undefined,sessionCookie(login),user.id)).then(res=>res.json())).data,data);
+    const remembered=await handleRequest(request('login','POST',{username:'test1',password:input.password,remember:true}));
+    assert.equal((await remembered.clone().json()).remembered,true);
+    assert.match(remembered.headers.getSetCookie().find(item=>item.startsWith('rgt_remember='))!,/Max-Age=604800/);
+    const rememberedSession=sessionCookie(remembered),oldRemember=rememberCookie(remembered);
+    const rememberedRow=db.rows.get(`sessions/${tokenHash(rememberedSession.split('=')[1])}`)!;
+    rememberedRow.last_seen_at=new Date(Date.now()-16*60_000).toISOString();
+    const restored=await handleRequest(request('status','GET',undefined,`${rememberedSession}; ${oldRemember}`));
+    assert.equal(restored.status,200);
+    assert.equal((await restored.clone().json()).user.id,user.id);
+    assert.notEqual(rememberCookie(restored),oldRemember);
+    assert.equal(db.rows.has(`remember_tokens/${tokenHash(oldRemember.split('=')[1])}`),false);
+    const restoredCookies=`${sessionCookie(restored)}; ${rememberCookie(restored)}`;
+    assert.deepEqual((await handleRequest(request('data','GET',undefined,restoredCookies,user.id)).then(res=>res.json())).data,data);
+    assert.equal(await handleRequest(request('logout','POST',{},restoredCookies)).then(res=>res.status),200);
+    assert.equal(await handleRequest(request('status','GET',undefined,rememberCookie(restored))).then(res=>res.status),401);
+    const rememberedAgain=await handleRequest(request('login','POST',{username:'test1',password:input.password,remember:true}));
+    const newAccount=await handleRequest(request('register','POST',{
+      name:'새 회원',birthDate:'1997-07-18',phone:'010-3333-4444',username:'newmember',password:'New!12345',
+    },rememberCookie(rememberedAgain)));
+    assert.equal(newAccount.status,201);
+    assert.equal(await handleRequest(request('status','GET',undefined,rememberCookie(rememberedAgain))).then(res=>res.status),401);
     const adminSessionId=tokenHash(adminCookie.split('=')[1]);
     const savedAdminSession=db.rows.get(`sessions/${adminSessionId}`)!;
     savedAdminSession.last_seen_at=new Date(Date.now()-16*60_000).toISOString();

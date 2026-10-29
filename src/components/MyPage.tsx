@@ -13,7 +13,7 @@ export default function MyPage({user,onUpdated,onLogout,onBack}: {user:AccountUs
   async function save(event:FormEvent) {
     event.preventDefault();setBusy(true);setNotice('');
     try {
-      const result=await accountApi.updateProfile({birthDate,phone,currentPassword,newPassword});
+      const result=await accountApi.updateProfile({userId:user.id,birthDate,phone,currentPassword,newPassword});
       onUpdated(result.user);setCurrentPassword('');setNewPassword('');setNotice('내 정보를 저장했어요.');
     } catch(error) {setNotice(error instanceof Error?error.message:'저장하지 못했어요.');}
     finally {setBusy(false);}

@@ -13,8 +13,10 @@ interface UserRow {
 }
 interface AuthState {primary: UserRow; effective: UserRow; impersonationId?: string}
 interface SessionRow {user_id:string;actor_admin_id:string|null;expires_at:string;created_at:string;last_seen_at?:string}
+interface RememberRow {user_id:string;expires_at:string;created_at:string}
 interface DataRow {data_cipher:string;version:number;transaction_count:number;total_expense:number;total_saving:number;total_xp:number;updated_at:string}
 type JsonObject = Record<string, unknown>;
+const REMEMBER_SECONDS = 7 * 86400;
 
 class ApiError extends Error {
   constructor(public status: number, message: string, public code = 'request_failed') {super(message);}
@@ -115,6 +117,10 @@ function adminOnly(state: AuthState): void {
   if (state.primary.role !== 'ADMIN' || state.impersonationId) throw new ApiError(403, '관리자 권한이 필요해요.', 'forbidden');
 }
 
+function requireAccount(state:AuthState,expectedId:unknown):void {
+  if(expectedId!==state.effective.id) throw new ApiError(409,'로그인 계정이 변경됐어요. 다시 로그인해 주세요.','account_changed');
+}
+
 async function createSession(userId: string, actorAdminId?: string): Promise<string> {
   const token = newToken();
   const now = new Date();
@@ -123,6 +129,71 @@ async function createSession(userId: string, actorAdminId?: string): Promise<str
     expires_at:new Date(now.getTime()+12*60*60_000).toISOString(),created_at:now.toISOString(),last_seen_at:now.toISOString(),
   } satisfies SessionRow);
   return token;
+}
+
+async function createRememberToken(userId:string):Promise<string> {
+  const token=newToken(), now=new Date();
+  await database().collection('remember_tokens').doc(tokenHash(token)).create({
+    user_id:userId,created_at:now.toISOString(),expires_at:new Date(now.getTime()+REMEMBER_SECONDS*1000).toISOString(),
+  } satisfies RememberRow);
+  return token;
+}
+
+async function revokeRememberToken(req:Request):Promise<void> {
+  const token=readCookie(req,'rgt_remember');
+  if(token && /^[A-Za-z0-9_-]{43}$/.test(token)) await database().collection('remember_tokens').doc(tokenHash(token)).delete();
+}
+
+async function hasRememberToken(req:Request,userId:string):Promise<boolean> {
+  const token=readCookie(req,'rgt_remember');
+  if(!token || !/^[A-Za-z0-9_-]{43}$/.test(token)) return false;
+  const ref=database().collection('remember_tokens').doc(tokenHash(token));
+  const found=await ref.get();
+  if(!found.exists) return false;
+  const row=found.data() as RememberRow;
+  if(row.expires_at<=new Date().toISOString()) {await ref.delete();return false;}
+  return row.user_id===userId;
+}
+
+async function renewFromRemember(req:Request):Promise<Response|null> {
+  const oldToken=readCookie(req,'rgt_remember');
+  if(!oldToken || !/^[A-Za-z0-9_-]{43}$/.test(oldToken)) return null;
+  const freshToken=newToken(), now=new Date();
+  const oldRef=database().collection('remember_tokens').doc(tokenHash(oldToken));
+  const freshRef=database().collection('remember_tokens').doc(tokenHash(freshToken));
+  const renewed=await database().runTransaction(async transaction=>{
+    const found=await transaction.get(oldRef);
+    if(!found.exists) return null;
+    const row=found.data() as RememberRow;
+    if(row.expires_at<=now.toISOString()) {transaction.delete(oldRef);return null;}
+    const account=await transaction.get(database().collection('users').doc(row.user_id));
+    if(!account.exists) {transaction.delete(oldRef);return null;}
+    const user=account.data() as UserRow;
+    if(user.role!=='USER') {transaction.delete(oldRef);return null;}
+    const remainingSeconds=Math.max(1,Math.ceil((Date.parse(row.expires_at)-now.getTime())/1000));
+    transaction.delete(oldRef);
+    transaction.create(freshRef,{user_id:user.id,created_at:now.toISOString(),expires_at:row.expires_at} satisfies RememberRow);
+    return {user,remainingSeconds};
+  });
+  if(!renewed) return null;
+  const token=await createSession(renewed.user.id);
+  return response({user:publicUser(renewed.user),impersonating:false,remembered:true},200,[
+    cookie(req,'rgt_session',token),cookie(req,'rgt_remember',freshToken,renewed.remainingSeconds),cookie(req,'rgt_impersonation','',0),
+  ]);
+}
+
+async function status(req:Request):Promise<Response> {
+  let state:AuthState;
+  try {state=await auth(req);}
+  catch(error) {
+    if(!(error instanceof ApiError) || error.status!==401) throw error;
+    const restored=await renewFromRemember(req);
+    if(restored) return restored;
+    throw error;
+  }
+  const remembered=await hasRememberToken(req,state.primary.id);
+  return response({user:publicUser(state.effective),impersonating:!!state.impersonationId,
+    adminName:state.impersonationId ? state.primary.name : undefined,remembered});
 }
 
 async function register(req: Request, input: JsonObject): Promise<Response> {
@@ -150,8 +221,9 @@ async function register(req: Request, input: JsonObject): Promise<Response> {
     if ((error as {code?: number}).code === 6) throw new ApiError(409,'이미 사용 중인 아이디예요.','duplicate_username');
     throw error;
   }
+  await revokeRememberToken(req);
   const token = await createSession(id);
-  return response({user:publicUser(row), impersonating:false}, 201, [cookie(req,'rgt_session',token)]);
+  return response({user:publicUser(row), impersonating:false,remembered:false}, 201, [cookie(req,'rgt_session',token),cookie(req,'rgt_remember','',0)]);
 }
 
 let dummyHash: Promise<string> | undefined;
@@ -187,18 +259,26 @@ async function login(req: Request, input: JsonObject): Promise<Response> {
   await attemptRef.delete();
   user.last_login_at = new Date().toISOString();
   await database().collection('users').doc(user.id).update({last_login_at:user.last_login_at});
+  await revokeRememberToken(req);
+  const remembered=input.remember===true && user.role==='USER';
   const token = await createSession(user.id);
-  return response({user:publicUser(user),impersonating:false},200,[cookie(req,'rgt_session',token),cookie(req,'rgt_impersonation','',0)]);
+  const rememberToken=remembered ? await createRememberToken(user.id) : null;
+  return response({user:publicUser(user),impersonating:false,remembered},200,[
+    cookie(req,'rgt_session',token),cookie(req,'rgt_impersonation','',0),
+    rememberToken ? cookie(req,'rgt_remember',rememberToken,REMEMBER_SECONDS) : cookie(req,'rgt_remember','',0),
+  ]);
 }
 
 async function logout(req: Request): Promise<Response> {
   const primary = readCookie(req,'rgt_session'), impersonated = readCookie(req,'rgt_impersonation');
   if (primary) await database().collection('sessions').doc(tokenHash(primary)).delete();
   if (impersonated) await database().collection('sessions').doc(tokenHash(impersonated)).delete();
-  return response({ok:true},200,[cookie(req,'rgt_session','',0),cookie(req,'rgt_impersonation','',0)]);
+  await revokeRememberToken(req);
+  return response({ok:true},200,[cookie(req,'rgt_session','',0),cookie(req,'rgt_impersonation','',0),cookie(req,'rgt_remember','',0)]);
 }
 
-async function updateProfile(state: AuthState, input: JsonObject): Promise<Response> {
+async function updateProfile(req:Request,state: AuthState, input: JsonObject): Promise<Response> {
+  requireAccount(state,input.userId);
   const birthDate = string(input.birthDate,10), phone = validPhone(string(input.phone,30));
   if (!validBirthDate(birthDate)) throw new ApiError(400,'생년월일을 확인해 주세요.');
   const nextPassword = string(input.newPassword,128);
@@ -213,7 +293,8 @@ async function updateProfile(state: AuthState, input: JsonObject): Promise<Respo
     ...(passwordHash ? {password_hash:passwordHash} : {})};
   await database().collection('users').doc(state.effective.id).update(updates);
   if (state.impersonationId) await audit(state.primary.id,state.effective.id,'PROFILE_UPDATE');
-  return response({user:publicUser({...state.effective,...updates}),impersonating:!!state.impersonationId});
+  return response({user:publicUser({...state.effective,...updates}),impersonating:!!state.impersonationId,
+    remembered:await hasRememberToken(req,state.primary.id)});
 }
 
 function appData(input: unknown): JsonObject {
@@ -230,12 +311,14 @@ function metrics(data: JsonObject): [number,number,number,number] {
   return [transactions.length,total('EXPENSE'),total('SAVING'),Number.isSafeInteger(character.totalXp) ? character.totalXp! : 0];
 }
 
-async function getData(state: AuthState): Promise<Response> {
+async function getData(req:Request,state: AuthState): Promise<Response> {
+  requireAccount(state,new URL(req.url).searchParams.get('userId'));
   const row = (await database().collection('app_data').doc(state.effective.id).get()).data() as DataRow|undefined;
   return response({data:row ? JSON.parse(decryptField(row.data_cipher)) : null,version:row?.version ?? 0});
 }
 
 async function saveData(state: AuthState, input: JsonObject): Promise<Response> {
+  requireAccount(state,input.userId);
   const data = appData(input.data);
   const version = input.version;
   if (!Number.isSafeInteger(version) || Number(version)<0) throw new ApiError(400,'데이터 버전을 확인해 주세요.');
@@ -300,14 +383,14 @@ async function impersonate(req: Request,state: AuthState,input: JsonObject): Pro
   if (target.role !== 'USER') throw new ApiError(404,'접속할 회원을 찾을 수 없어요.');
   const token = await createSession(target.id,state.primary.id);
   await audit(state.primary.id,target.id,'IMPERSONATION_START');
-  return response({user:publicUser(target),impersonating:true,adminName:state.primary.name},200,[cookie(req,'rgt_impersonation',token)]);
+  return response({user:publicUser(target),impersonating:true,adminName:state.primary.name,remembered:false},200,[cookie(req,'rgt_impersonation',token)]);
 }
 
 async function stopImpersonation(req: Request,state: AuthState): Promise<Response> {
   if (!state.impersonationId) throw new ApiError(400,'회원 계정 접속 중이 아니에요.');
   await audit(state.primary.id,state.effective.id,'IMPERSONATION_STOP');
   await database().collection('sessions').doc(state.impersonationId).delete();
-  return response({user:publicUser(state.primary),impersonating:false},200,[cookie(req,'rgt_impersonation','',0)]);
+  return response({user:publicUser(state.primary),impersonating:false,remembered:false},200,[cookie(req,'rgt_impersonation','',0)]);
 }
 
 async function reserveAiRequest(userId: string): Promise<void> {
@@ -370,11 +453,11 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (req.method === 'POST' && action === 'register') return await register(req,await body(req));
     if (req.method === 'POST' && action === 'login') return await login(req,await body(req));
     if (req.method === 'POST' && action === 'logout') return await logout(req);
+    if (req.method === 'GET' && action === 'status') return await status(req);
     const state = await auth(req);
-    if (req.method === 'GET' && action === 'status') return response({user:publicUser(state.effective),impersonating:!!state.impersonationId,adminName:state.impersonationId ? state.primary.name : undefined});
-    if (req.method === 'GET' && action === 'data') return await getData(state);
+    if (req.method === 'GET' && action === 'data') return await getData(req,state);
     if (req.method === 'POST' && action === 'data') return await saveData(state,await body(req));
-    if (req.method === 'POST' && action === 'profile') return await updateProfile(state,await body(req));
+    if (req.method === 'POST' && action === 'profile') return await updateProfile(req,state,await body(req));
     if (req.method === 'POST' && action === 'stop-impersonation') return await stopImpersonation(req,state);
     if (req.method === 'POST' && action === 'ai-advice') return await aiAdvice(state,await body(req));
     if (req.method === 'POST' && action === 'ai-receipt') return await aiReceipt(state,await body(req,1_900_000));

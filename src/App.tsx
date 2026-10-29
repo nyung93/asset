@@ -68,40 +68,46 @@ function AccountApp() {
   const sync=useRef<AccountSync|null>(null);
   const authChannel=useRef<BroadcastChannel|null>(null);
   const loggingOut=useRef(false);
+  const activeUserId=useRef<string|null>(null);
   function lockLocal() {
     sessionStorage.removeItem(ACTIVE_TAB_KEY);
     sync.current?.dispose();sync.current=null;
     useAppStore.getState().resetAppData();
+    activeUserId.current=null;
     setSession(null);setLegacyOffer(false);setSyncError('');
   }
   function notifyOtherTabs() {authChannel.current?.postMessage('logout');}
   async function adopt(next:AccountSession) {
     sync.current?.dispose();sync.current=null;
-    const result=await accountApi.data();
+    const result=await accountApi.data(next.user.id);
     useAppStore.getState().replaceAppData(result.data ?? structuredClone(initialData));
-    sync.current=new AccountSync(result.version,setSyncError);
+    sync.current=new AccountSync(result.version,next.user.id,setSyncError);
     setLegacyOffer(!result.data && !!localStorage.getItem('rich-grandma-tycoon-v1'));
     sessionStorage.setItem(ACTIVE_TAB_KEY,'1');
     loggingOut.current=false;
+    activeUserId.current=next.user.id;
     setSession(next);setSyncError('');setSetupError('');
+    authChannel.current?.postMessage({type:'login',userId:next.user.id});
   }
   useEffect(()=>{
     let alive=true;
     const channel=typeof BroadcastChannel==='undefined' ? null : new BroadcastChannel('rgt-session-v1');
     authChannel.current=channel;
-    if(channel) channel.onmessage=event=>{if(event.data==='logout') lockLocal();};
+    if(channel) channel.onmessage=event=>{
+      if(event.data==='logout' || (event.data?.type==='login' && activeUserId.current && event.data.userId!==activeUserId.current)) lockLocal();
+    };
     (async()=>{
       try {
-        // Only a reload of the tab where the user signed in may restore a session.
-        // Opening a link, a new tab or browser history must require login again.
+        // A remembered device may return through a new link; ordinary sessions
+        // only survive a reload of the tab where the user signed in.
         const navigation=performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming|undefined;
-        if(sessionStorage.getItem(ACTIVE_TAB_KEY)!=='1' || navigation?.type!=='reload') {
+        const next=await accountApi.status();
+        if(!next.remembered && (sessionStorage.getItem(ACTIVE_TAB_KEY)!=='1' || navigation?.type!=='reload')) {
           lockLocal();
           await accountApi.logout();
           if(alive) notifyOtherTabs();
           return;
         }
-        const next=await accountApi.status();
         if(alive) await adopt(next);
       } catch(error) {
         if(alive) {
@@ -130,21 +136,31 @@ function AccountApp() {
     let lastActivity=Date.now();
     let timer:ReturnType<typeof setTimeout>;
     let active=true;
+    const expire=()=>{
+      if(!session.remembered) {void logout();return;}
+      const pending=sync.current;
+      lockLocal();
+      if(pending) void pending.flush().then(saved=>{
+        if(!saved) setSetupError('마지막 변경사항을 저장하지 못했어요. 다시 로그인해 기록을 확인해 주세요.');
+      });
+    };
     const check=()=>{
       if(!active) return;
       const remaining=IDLE_TIMEOUT_MS-(Date.now()-lastActivity);
-      if(remaining<=0) {void logout();return;}
+      if(remaining<=0) {expire();return;}
       timer=setTimeout(check,remaining);
     };
     const touch=()=>{lastActivity=Date.now();clearTimeout(timer);check();};
     const visible=()=>{
       if(document.visibilityState!=='visible') return;
-      if(Date.now()-lastActivity>=IDLE_TIMEOUT_MS) {void logout();return;}
-      void accountApi.status().catch(error=>{
+      if(Date.now()-lastActivity>=IDLE_TIMEOUT_MS) {expire();return;}
+      void accountApi.status().then(next=>{
+        if(active && next.user.id!==session.user.id) lockLocal();
+      }).catch(error=>{
         if(active && error instanceof AccountApiError && error.status===401) void logout();
       });
     };
-    const restored=(event:PageTransitionEvent)=>{if(event.persisted) void logout();};
+    const restored=(event:PageTransitionEvent)=>{if(event.persisted) expire();};
     for(const event of ['pointerdown','keydown','touchstart']) window.addEventListener(event,touch,{passive:true});
     document.addEventListener('visibilitychange',visible);
     window.addEventListener('pageshow',restored);

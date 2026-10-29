@@ -3,9 +3,14 @@ import CharacterAvatar from './CharacterAvatar';
 import {DEFAULT_AVATAR_CONFIG} from '../lib/avatar';
 import {accountApi, AccountApiError, type AccountSession} from '../lib/accountApi';
 
+const SAVED_ID_KEY='rgt-saved-username-v1';
+function savedUsername():string {try{return localStorage.getItem(SAVED_ID_KEY) ?? '';}catch{return '';}}
+
 export default function AuthShell({onAuthenticated, setupError}: {onAuthenticated:(session:AccountSession)=>Promise<void>; setupError?:string}) {
   const [mode, setMode] = useState<'login'|'register'>('login');
-  const [form, setForm] = useState({name:'', birthDate:'', phone:'', username:'', password:''});
+  const [form, setForm] = useState(() => ({name:'', birthDate:'', phone:'', username:savedUsername(), password:''}));
+  const [saveId,setSaveId]=useState(()=>!!savedUsername());
+  const [remember,setRemember]=useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -17,8 +22,11 @@ export default function AuthShell({onAuthenticated, setupError}: {onAuthenticate
     }
     setBusy(true);
     try {
-      const session = mode === 'register' ? await accountApi.register(form) : await accountApi.login({username:form.username, password:form.password});
+      const session = mode === 'register' ? await accountApi.register(form) : await accountApi.login({username:form.username, password:form.password,remember});
       await onAuthenticated(session);
+      if(mode==='login') {
+        try {if(saveId) localStorage.setItem(SAVED_ID_KEY,form.username.trim());else localStorage.removeItem(SAVED_ID_KEY);} catch { /* Login still works when storage is blocked. */ }
+      }
     } catch (cause) {
       setError(cause instanceof AccountApiError && cause.code === 'setup_required'
         ? 'Firebase 연결이 아직 완료되지 않았어요. 서버 설정 후 다시 시도해 주세요.'
@@ -43,6 +51,8 @@ export default function AuthShell({onAuthenticated, setupError}: {onAuthenticate
           <label className="block text-sm font-semibold">아이디<input required autoComplete="username" maxLength={20} value={form.username} onChange={e => set('username', e.target.value)} className="auth-input" placeholder="영문으로 시작하는 4~20자"/></label>
           <label className="block text-sm font-semibold">비밀번호<input required type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'register' ? 8 : undefined} value={form.password} onChange={e => set('password', e.target.value)} className="auth-input" placeholder="비밀번호를 입력해 주세요"/></label>
           {mode === 'register' && <p className="text-xs leading-5 text-[#647784]">8자 이상 · 영문 대문자·소문자·특수문자 포함</p>}
+          {mode==='login' && <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-[#526b7b]"><label className="flex items-center gap-2"><input type="checkbox" checked={saveId} onChange={e=>setSaveId(e.target.checked)} className="accent-[#235b83]"/>아이디 저장</label><label className="flex items-center gap-2"><input type="checkbox" checked={remember} onChange={e=>setRemember(e.target.checked)} className="accent-[#235b83]"/>7일간 자동 로그인</label></div>}
+          {mode==='login' && remember && <p className="text-xs text-[#647784]">자동 로그인은 개인 기기에서만 사용해 주세요. 로그아웃하면 해제돼요.</p>}
           <button disabled={busy} type="submit" className="button-primary mt-2 w-full !py-3.5 disabled:opacity-60">{busy ? '확인하고 있어요...' : mode === 'login' ? '로그인하고 시작하기' : '회원가입하고 시작하기'}</button>
           {(error || setupError) && <p role={submitted ? 'alert' : 'status'} className="rounded-md bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700">{error || setupError}</p>}
         </form>

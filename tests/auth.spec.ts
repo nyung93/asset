@@ -15,27 +15,28 @@ async function expectAppNavigation(page:Page) {
 
 async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
   let current=initial;
+  let remembered=false;
   const actions:string[]=[];
   const saves:unknown[]=[];
   let savedData:unknown=null;
   let version=0;
-  await page.route('**/api/index?**',async route=>{
+  await page.context().route('**/api/index?**',async route=>{
     const request=route.request();
     const action=new URL(request.url()).searchParams.get('action');
     if(action) actions.push(action);
     const payload=request.postDataJSON?.() ?? {};
     const respond=(json:unknown,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(json)});
-    if(action==='status') return current==='guest'?respond({error:'로그인이 필요해요.',code:'unauthorized'},401):respond({user:current==='admin'?admin:person,impersonating:false});
-    if(action==='login') {current=initial==='admin'?'admin':'user';return respond({user:current==='admin'?admin:person,impersonating:false});}
-    if(action==='register') {current='user';return respond({user:person,impersonating:false});}
+    if(action==='status') return current==='guest'?respond({error:'로그인이 필요해요.',code:'unauthorized'},401):respond({user:current==='admin'?admin:person,impersonating:false,remembered});
+    if(action==='login') {current=initial==='admin'?'admin':'user';remembered=payload.remember===true && current==='user';return respond({user:current==='admin'?admin:person,impersonating:false,remembered});}
+    if(action==='register') {current='user';remembered=false;return respond({user:person,impersonating:false,remembered});}
     if(action==='data'&&request.method()==='GET') return respond({data:savedData,version});
     if(action==='data'&&request.method()==='POST') {saves.push(payload);savedData=payload.data;version++;return respond({version});}
-    if(action==='profile') return respond({user:{...person,birthDate:payload.birthDate,phone:payload.phone},impersonating:false});
+    if(action==='profile') return respond({user:{...person,birthDate:payload.birthDate,phone:payload.phone},impersonating:false,remembered});
     if(action==='dashboard') return respond({users:{total_users:12,new_users_this_month:3,active_users_30d:8},data:{transaction_count:'34',total_expense:'100000',total_saving:'50000',total_xp:'450'}});
     if(action==='members') return respond({members:[{id:person.id,name:person.name,username:person.username,role:'USER',createdAt:person.createdAt,lastLoginAt:person.lastLoginAt}],hasMore:false});
     if(action==='impersonate') {current='user';return respond({user:person,impersonating:true,adminName:admin.name});}
     if(action==='stop-impersonation') {current='admin';return respond({user:admin,impersonating:false});}
-    if(action==='logout') {current='guest';return respond({ok:true});}
+    if(action==='logout') {current='guest';remembered=false;return respond({ok:true});}
     return respond({error:'Unknown action'},404);
   });
   return {saves,actions};
@@ -63,6 +64,33 @@ test('opening a link with only an old cookie requires a fresh login',async({page
   await expectAppNavigation(page);
   await page.reload();
   await expectAppNavigation(page);
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+});
+
+test('saved ID and opted-in automatic login survive a new visit, then logout revokes them',async({page})=>{
+  const api=await mockApi(page,'guest');
+  await page.goto('/');
+  await expect(page.getByRole('checkbox',{name:'아이디 저장'})).not.toBeChecked();
+  await expect(page.getByRole('checkbox',{name:'7일간 자동 로그인'})).not.toBeChecked();
+  await page.getByLabel('아이디',{exact:true}).fill('minyoung');
+  await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
+  await page.getByRole('checkbox',{name:'아이디 저장'}).check();
+  await page.getByRole('checkbox',{name:'7일간 자동 로그인'}).check();
+  await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
+  await expectAppNavigation(page);
+  expect(await page.evaluate(()=>Object.keys(localStorage).filter(key=>key.startsWith('rgt-')).map(key=>[key,localStorage.getItem(key)]))).toEqual([['rgt-saved-username-v1','minyoung']]);
+  await page.goto('/');
+  await expectAppNavigation(page);
+  const second=await page.context().newPage();
+  await second.goto('/');
+  await expectAppNavigation(second);
+  expect(api.actions.filter(action=>action==='logout')).toHaveLength(0);
+  await page.getByRole('button',{name:/마이페이지/}).first().click();
+  await page.getByRole('button',{name:'로그아웃',exact:true}).last().click();
+  await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+  await expect(second.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+  await expect(page.getByLabel('아이디',{exact:true})).toHaveValue('minyoung');
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
 });
@@ -177,6 +205,59 @@ test('authenticated store changes are sent to the account API',async({page})=>{
     return useAppStore.getState().goals;
   });
   expect(restored).toContainEqual({year:2026,month:10,targetSavingAmount:50000,targetInvestReturnRate:3});
+});
+
+test('switching accounts loads only the signed-in member’s saved data',async({page})=>{
+  type Key='alice'|'bob';
+  let current:Key|null=null;
+  const saved:Partial<Record<Key,{data:unknown;version:number}>>={};
+  const users={alice:{...person,id:'00000000-0000-4000-8000-000000000011',name:'앨리스',username:'alice'},
+    bob:{...person,id:'00000000-0000-4000-8000-000000000012',name:'보라',username:'bob'}};
+  await page.context().route('**/api/index?**',route=>{
+    const request=route.request(),action=new URL(request.url()).searchParams.get('action');
+    const payload=request.postDataJSON?.() ?? {};
+    const respond=(json:unknown,status=200)=>route.fulfill({status,contentType:'application/json',body:JSON.stringify(json)});
+    if(action==='login') {current=payload.username as Key;return respond({user:users[current],impersonating:false,remembered:false});}
+    if(action==='logout') {current=null;return respond({ok:true});}
+    if(action==='status') return current?respond({user:users[current],impersonating:false,remembered:false}):respond({error:'로그인이 필요해요.'},401);
+    if(action==='data' && !current) return respond({error:'로그인이 필요해요.'},401);
+    if(action==='data' && current && request.method()==='GET') return respond(saved[current] ?? {data:null,version:0});
+    if(action==='data' && current) {const version=(saved[current]?.version ?? 0)+1;saved[current]={data:payload.data,version};return respond({version});}
+    return respond({error:'Unknown action'},404);
+  });
+  const signIn=async(username:Key)=>{
+    await page.getByLabel('아이디',{exact:true}).fill(username);
+    await page.getByLabel('비밀번호',{exact:true}).fill('Abcdefg!');
+    await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
+    await expectAppNavigation(page);
+  };
+  const signOut=async()=>{
+    await page.getByRole('button',{name:/마이페이지/}).first().click();
+    await page.getByRole('button',{name:'로그아웃',exact:true}).last().click();
+    await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+  };
+  const goals=()=>page.evaluate(async()=>{
+    const {useAppStore}=await import('/src/store/index.ts');
+    return useAppStore.getState().goals;
+  });
+  await page.goto('/');
+  await signIn('alice');
+  await page.evaluate(async()=>{
+    const {useAppStore}=await import('/src/store/index.ts');
+    useAppStore.getState().saveGoal({year:2026,month:10,targetSavingAmount:111000,targetInvestReturnRate:1});
+  });
+  await expect.poll(()=>saved.alice?.version).toBe(1);
+  await signOut();
+  await signIn('bob');
+  expect(await goals()).toEqual([]);
+  await page.evaluate(async()=>{
+    const {useAppStore}=await import('/src/store/index.ts');
+    useAppStore.getState().saveGoal({year:2026,month:10,targetSavingAmount:222000,targetInvestReturnRate:2});
+  });
+  await expect.poll(()=>saved.bob?.version).toBe(1);
+  await signOut();
+  await signIn('alice');
+  expect(await goals()).toEqual([{year:2026,month:10,targetSavingAmount:111000,targetInvestReturnRate:1}]);
 });
 
 test('My Page character choice saves to the account and follows the user across tabs and reloads',async({page},testInfo)=>{

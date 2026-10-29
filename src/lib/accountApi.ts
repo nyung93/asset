@@ -4,7 +4,7 @@ export interface AccountUser {
   id:string; name:string; username:string; birthDate:string; phone:string;
   role:'USER'|'ADMIN'; createdAt:string; lastLoginAt:string|null;
 }
-export interface AccountSession {user:AccountUser; impersonating:boolean; adminName?:string}
+export interface AccountSession {user:AccountUser; impersonating:boolean; remembered:boolean; adminName?:string}
 export interface AdminMember {id:string;name:string;username:string;role:'USER'|'ADMIN';lastLoginAt:string|null;createdAt:string}
 export interface AdminDashboardData {
   users:{total_users:number;new_users_this_month:number;active_users_30d:number};
@@ -30,11 +30,11 @@ async function call<T>(action:string, method:'GET'|'POST'='GET', input?:object, 
 export const accountApi={
   status:()=>call<AccountSession>('status'),
   register:(input:{name:string;birthDate:string;phone:string;username:string;password:string})=>call<AccountSession>('register','POST',input),
-  login:(input:{username:string;password:string})=>call<AccountSession>('login','POST',input),
+  login:(input:{username:string;password:string;remember:boolean})=>call<AccountSession>('login','POST',input),
   logout:()=>call<{ok:boolean}>('logout','POST'),
-  data:()=>call<{data:AppData|null;version:number}>('data'),
-  saveData:(data:AppData,version:number)=>call<{version:number}>('data','POST',{data,version}),
-  updateProfile:(input:{birthDate:string;phone:string;currentPassword?:string;newPassword?:string})=>call<AccountSession>('profile','POST',input),
+  data:(userId:string)=>call<{data:AppData|null;version:number}>('data','GET',undefined,{userId}),
+  saveData:(data:AppData,version:number,userId:string)=>call<{version:number}>('data','POST',{data,version,userId}),
+  updateProfile:(input:{userId:string;birthDate:string;phone:string;currentPassword?:string;newPassword?:string})=>call<AccountSession>('profile','POST',input),
   dashboard:()=>call<AdminDashboardData>('dashboard'),
   members:(search:string,offset=0)=>call<{members:AdminMember[];hasMore:boolean}>('members','GET',undefined,{search,offset:String(offset)}),
   impersonate:(userId:string)=>call<AccountSession>('impersonate','POST',{userId}),
