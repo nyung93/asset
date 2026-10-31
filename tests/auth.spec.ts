@@ -32,7 +32,7 @@ async function mockApi(page:Page,initial:'guest'|'user'|'admin') {
     if(action==='register') {current='user';remembered=false;return respond({user:person,impersonating:false,remembered});}
     if(action==='data'&&request.method()==='GET') return respond({data:savedData,version});
     if(action==='data'&&request.method()==='POST') {saves.push(payload);savedData=payload.data;version++;return respond({version});}
-    if(action==='profile') return respond({user:{...person,birthDate:payload.birthDate,phone:payload.phone},impersonating:false,remembered});
+    if(action==='profile') {if(payload.newPassword) remembered=false;return respond({user:{...person,birthDate:payload.birthDate,phone:payload.phone},impersonating:false,remembered});}
     if(action==='dashboard') return respond({users:{total_users:12,new_users_this_month:3,active_users_30d:8},data:{transaction_count:'34',total_expense:'100000',total_saving:'50000',total_xp:String(score)}});
     if(action==='members') return respond({members:[{id:person.id,name:person.name,username:person.username,role:'USER',birthDate:person.birthDate,phone:person.phone,createdAt:person.createdAt,lastLoginAt:person.lastLoginAt,totalXp:score,level:score?5:1,houseStage:1,houseName:'아늑한 반지하 원룸'}],hasMore:false});
     if(action==='reset-member-xp') {if(current!=='admin') return respond({error:'관리자 권한이 필요해요.',code:'forbidden'},403);score=0;return respond({ok:true,totalXp:0,level:1,houseStage:1});}
@@ -192,6 +192,24 @@ test('login opens account data and immutable profile fields',async({page})=>{
   await expect(page.getByRole('status')).toContainText('저장했어요');
   await page.getByRole('button',{name:'로그아웃',exact:true}).last().click();
   await expect(page.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
+});
+
+test('changing the password signs out another open tab and keeps the editing tab active',async({page})=>{
+  await mockApi(page,'guest');await page.goto('/');
+  await page.getByLabel('아이디',{exact:true}).fill('minyoung');
+  await page.getByLabel('비밀번호',{exact:true}).fill('Before!123');
+  await page.getByRole('checkbox',{name:'7일간 자동 로그인'}).check();
+  await page.getByRole('button',{name:'로그인하고 시작하기'}).click();
+  await expectAppNavigation(page);
+  const second=await page.context().newPage();
+  await second.goto('/');await expectAppNavigation(second);
+  await page.getByRole('button',{name:/마이페이지/}).first().click();
+  await page.getByLabel('현재 비밀번호').fill('Before!123');
+  await page.getByLabel('새 비밀번호').fill('After!456');
+  await page.getByRole('button',{name:'내 정보 저장'}).click();
+  await expect(page.getByRole('status')).toContainText('다른 기기의 로그인은 해제됐어요');
+  await expectAppNavigation(page);
+  await expect(second.getByRole('heading',{name:'내 마이룸에 들어가기'})).toBeVisible();
 });
 
 test('admin sees member details, resets XP and enters member account',async({page})=>{

@@ -269,3 +269,36 @@ test('one-time admin setup requires a server secret and cannot be reused',async(
     assert.equal(await handleRequest(request('login','POST',{username:'admin',password:'Setup!987'})).then(res=>res.status),200);
   } finally {delete process.env.ADMIN_SETUP_TOKEN;setDatabaseForTests(undefined);}
 });
+
+test('changing a password revokes older sessions and remembered devices while keeping the current page signed in',async()=>{
+  process.env.NODE_ENV='test';
+  process.env.FIREBASE_PROJECT_ID='test-project';
+  process.env.FIREBASE_CLIENT_EMAIL='test@example.com';
+  process.env.FIREBASE_PRIVATE_KEY='test-key';
+  process.env.FIELD_ENCRYPTION_KEY=randomBytes(32).toString('base64');
+  const db=new MemoryFirestore();
+  setDatabaseForTests(db as unknown as Firestore);
+  try {
+    const registered=await handleRequest(request('register','POST',{
+      name:'비밀번호 테스트',birthDate:'1995-05-12',phone:'010-1234-5678',username:'passwordtest',password:'Before!123',
+    }));
+    assert.equal(registered.status,201);
+    const userId=(await registered.clone().json()).user.id as string;
+    const remembered=await handleRequest(request('login','POST',{username:'passwordtest',password:'Before!123',remember:true}));
+    const oldSession=sessionCookie(remembered),oldRemember=rememberCookie(remembered);
+    const otherSession=sessionCookie(await handleRequest(request('login','POST',{username:'passwordtest',password:'Before!123'})));
+    const changed=await handleRequest(request('profile','POST',{
+      birthDate:'1995-05-12',phone:'010-1234-5678',currentPassword:'Before!123',newPassword:'After!456',
+    },`${oldSession}; ${oldRemember}`,userId));
+    assert.equal(changed.status,200);
+    assert.equal((await changed.clone().json()).remembered,false);
+    const currentSession=sessionCookie(changed);
+    assert.equal(rememberCookie(changed),'rgt_remember=');
+    assert.equal(await handleRequest(request('status','GET',undefined,currentSession)).then(res=>res.status),200);
+    assert.equal(await handleRequest(request('status','GET',undefined,oldSession)).then(res=>res.status),401);
+    assert.equal(await handleRequest(request('status','GET',undefined,otherSession)).then(res=>res.status),401);
+    assert.equal(await handleRequest(request('status','GET',undefined,oldRemember)).then(res=>res.status),401);
+    assert.equal(await handleRequest(request('login','POST',{username:'passwordtest',password:'Before!123'})).then(res=>res.status),401);
+    assert.equal(await handleRequest(request('login','POST',{username:'passwordtest',password:'After!456'})).then(res=>res.status),200);
+  } finally {setDatabaseForTests(undefined);}
+});

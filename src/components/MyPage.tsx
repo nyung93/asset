@@ -1,9 +1,9 @@
 import {useState,type FormEvent} from 'react';
 import {ArrowLeft,LogOut,Save} from 'lucide-react';
-import {accountApi,type AccountUser} from '../lib/accountApi';
+import {accountApi,type AccountSession,type AccountUser} from '../lib/accountApi';
 import CharacterPicker from './CharacterPicker';
 
-export default function MyPage({user,onUpdated,onLogout,onBack}: {user:AccountUser;onUpdated:(user:AccountUser)=>void;onLogout:()=>Promise<void>;onBack:()=>void}) {
+export default function MyPage({user,onUpdated,onLogout,onBack}: {user:AccountUser;onUpdated:(session:AccountSession,passwordChanged:boolean)=>void;onLogout:()=>Promise<void>;onBack:()=>void}) {
   const [birthDate,setBirthDate]=useState(user.birthDate);
   const [phone,setPhone]=useState(user.phone);
   const [currentPassword,setCurrentPassword]=useState('');
@@ -14,7 +14,7 @@ export default function MyPage({user,onUpdated,onLogout,onBack}: {user:AccountUs
     event.preventDefault();setBusy(true);setNotice('');
     try {
       const result=await accountApi.updateProfile({userId:user.id,birthDate,phone,currentPassword,newPassword});
-      onUpdated(result.user);setCurrentPassword('');setNewPassword('');setNotice('내 정보를 저장했어요.');
+      onUpdated(result,Boolean(newPassword));setCurrentPassword('');setNewPassword('');setNotice(newPassword ? '비밀번호를 바꿨어요. 다른 기기의 로그인은 해제됐어요.' : '내 정보를 저장했어요.');
     } catch(error) {setNotice(error instanceof Error?error.message:'저장하지 못했어요.');}
     finally {setBusy(false);}
   }

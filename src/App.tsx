@@ -10,7 +10,7 @@ import { useAppStore } from './store';
 import { progression } from './lib/progression';
 import { getCharacterMood } from './lib/characterMood';
 import { todayDate } from './lib/calendar';
-import {accountApi,AccountApiError,type AccountSession,type AccountUser} from './lib/accountApi';
+import {accountApi,AccountApiError,type AccountSession} from './lib/accountApi';
 import {AccountSync} from './lib/accountSync';
 import {initialData,migrateAppData} from './store';
 import AuthShell from './components/AuthShell';
@@ -28,7 +28,7 @@ const ACTIVE_TAB_KEY = 'rgt-active-tab-v1';
 const IDLE_TIMEOUT_MS = 15 * 60_000;
 function GameShell({session,onLogout,onImpersonate,onStopImpersonation,onProfileUpdated,syncError,onRetrySync,legacyOffer,onImportLegacy,onDismissLegacy}: {
   session?:AccountSession;onLogout?:()=>Promise<void>;onImpersonate?:(userId:string)=>Promise<void>;
-  onStopImpersonation?:()=>Promise<void>;onProfileUpdated?:(user:AccountUser)=>void;
+  onStopImpersonation?:()=>Promise<void>;onProfileUpdated?:(session:AccountSession,passwordChanged:boolean)=>void;
   syncError?:string;onRetrySync?:()=>void;legacyOffer?:boolean;onImportLegacy?:()=>void;onDismissLegacy?:()=>void;
 }) {
   const [tab, setTab] = useState(0);
@@ -167,7 +167,7 @@ function AccountApp() {
     window.addEventListener('pageshow',restored);
     check();
     return()=>{active=false;clearTimeout(timer);for(const event of ['pointerdown','keydown','touchstart']) window.removeEventListener(event,touch);document.removeEventListener('visibilitychange',visible);window.removeEventListener('pageshow',restored);};
-  },[session?.user.id]);
+  },[session?.user.id,session?.remembered]);
   async function impersonate(userId:string) {
     if(sync.current && !await sync.current.flush()) throw new Error('현재 가계부 저장을 마친 뒤 다시 시도해 주세요.');
     const next=await accountApi.impersonate(userId);
@@ -192,7 +192,7 @@ function AccountApp() {
   if(loading) return <div className="grid min-h-screen place-items-center bg-[#f7fafc] text-sm font-semibold text-[#647784]" role="status">할미가 마이룸 문을 열고 있어요...</div>;
   if(!session) return <AuthShell setupError={setupError} onAuthenticated={adopt}/>;
   return <GameShell key={`${session.user.id}:${session.impersonating}`} session={session} onLogout={logout} onImpersonate={impersonate} onStopImpersonation={stopImpersonation}
-    onProfileUpdated={user=>setSession(previous=>previous?{...previous,user}:previous)} syncError={syncError} onRetrySync={()=>void sync.current?.retry()}
+    onProfileUpdated={(next,passwordChanged)=>{setSession(next);if(passwordChanged)notifyOtherTabs();}} syncError={syncError} onRetrySync={()=>void sync.current?.retry()}
     legacyOffer={legacyOffer} onImportLegacy={()=>void importLegacy()} onDismissLegacy={()=>setLegacyOffer(false)}/>;
 }
 

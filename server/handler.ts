@@ -158,7 +158,10 @@ async function hasRememberToken(req:Request,userId:string):Promise<boolean> {
   if(!found.exists) return false;
   const row=found.data() as RememberRow;
   if(row.expires_at<=new Date().toISOString()) {await ref.delete();return false;}
-  return row.user_id===userId;
+  if(row.user_id!==userId) return false;
+  const user=await database().collection('users').doc(userId).get();
+  if(user.data()?.password_changed_at && row.created_at < user.data()!.password_changed_at) {await ref.delete();return false;}
+  return true;
 }
 
 async function renewFromRemember(req:Request):Promise<Response|null> {
@@ -176,6 +179,7 @@ async function renewFromRemember(req:Request):Promise<Response|null> {
     if(!account.exists) {transaction.delete(oldRef);return null;}
     const user=account.data() as UserRow;
     if(user.role!=='USER') {transaction.delete(oldRef);return null;}
+    if(user.password_changed_at && row.created_at < user.password_changed_at) {transaction.delete(oldRef);return null;}
     const remainingSeconds=Math.max(1,Math.ceil((Date.parse(row.expires_at)-now.getTime())/1000));
     transaction.delete(oldRef);
     transaction.create(freshRef,{user_id:user.id,created_at:now.toISOString(),expires_at:row.expires_at} satisfies RememberRow);
@@ -296,11 +300,27 @@ async function updateProfile(req:Request,state: AuthState, input: JsonObject): P
     passwordHash = await hashPassword(nextPassword);
   }
   const updates = {birth_date_cipher:encryptField(birthDate),phone_cipher:encryptField(phone),
-    ...(passwordHash ? {password_hash:passwordHash} : {})};
+    ...(passwordHash ? {password_hash:passwordHash,password_changed_at:new Date().toISOString()} : {})};
   await database().collection('users').doc(state.effective.id).update(updates);
   if (state.impersonationId) await audit(state.primary.id,state.effective.id,'PROFILE_UPDATE');
+  const cookies:string[]=[];
+  if(passwordHash) {
+    const [sessions,rememberTokens]=await Promise.all([
+      database().collection('sessions').where('user_id','==',state.effective.id).get(),
+      database().collection('remember_tokens').where('user_id','==',state.effective.id).get(),
+    ]);
+    const references=[...sessions.docs,...rememberTokens.docs].map(document=>document.ref);
+    for(let start=0;start<references.length;start+=450) {
+      const batch=database().batch();
+      references.slice(start,start+450).forEach(reference=>batch.delete(reference));
+      await batch.commit();
+    }
+    const token=await createSession(state.effective.id,state.impersonationId ? state.primary.id : undefined);
+    cookies.push(cookie(req,state.impersonationId ? 'rgt_impersonation' : 'rgt_session',token));
+    cookies.push(cookie(req,'rgt_remember','',0));
+  }
   return response({user:publicUser({...state.effective,...updates}),impersonating:!!state.impersonationId,
-    remembered:await hasRememberToken(req,state.primary.id)});
+    remembered:passwordHash ? false : await hasRememberToken(req,state.primary.id)},200,cookies);
 }
 
 function appData(input: unknown): JsonObject {
